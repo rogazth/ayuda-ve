@@ -1,6 +1,6 @@
 import { expect, test } from 'vitest'
 import { TYPES, fmtDist, haversine, typeOf } from './reports'
-import { inVenezuela } from './quakes'
+import { inVenezuela } from '../quakes/quakes'
 
 test('haversine ~111 km por grado de longitud en el ecuador', () => {
   expect(haversine(0, 0, 0, 1)).toBeGreaterThan(111000)

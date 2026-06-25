@@ -1,8 +1,8 @@
 import { createServerFn } from '@tanstack/react-start'
 import { and, eq } from 'drizzle-orm'
-import { getDb } from './db'
-import { contacts } from './db/schema'
-import { cleanSuggestion, nearestZone, type SuggestionInput } from './lib/contacts'
+import { getDb } from '../db'
+import { contacts } from '../db/schema'
+import { cleanSuggestion, nearestZone, type SuggestionInput } from './contacts'
 
 // Contactos de la zona del usuario. El cliente manda su GPS; resolvemos la zona
 // por cercanía (haversine) y devolvemos sus contactos visibles. Sin cobertura

@@ -1,5 +1,5 @@
 // Lógica pura de contactos por zona (sin D1) — compartida por las server fns y los tests.
-import { haversine } from './reports'
+import { haversine } from '../reports/reports'
 
 export const CONTACT_CATEGORIES = [
   'bomberos',

@@ -4,7 +4,7 @@ import { Suspense, lazy, useEffect, useState } from 'react'
 export const Route = createFileRoute('/')({ component: App })
 
 // Leaflet toca window: el mapa es cliente puro. lazy() evita importarlo en SSR.
-const AyudaMap = lazy(() => import('../components/ayuda-map/ayuda-map'))
+const MapScreen = lazy(() => import('../components/map/map-screen'))
 
 function App() {
   const [ready, setReady] = useState(false)
@@ -12,7 +12,7 @@ function App() {
   if (!ready) return <Splash />
   return (
     <Suspense fallback={<Splash />}>
-      <AyudaMap />
+      <MapScreen />
     </Suspense>
   )
 }

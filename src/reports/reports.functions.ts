@@ -1,7 +1,7 @@
 import { createServerFn } from '@tanstack/react-start'
 import { and, desc, eq, gte, lte } from 'drizzle-orm'
-import { getDb } from './db'
-import { reports } from './db/schema'
+import { getDb } from '../db'
+import { reports } from '../db/schema'
 
 // ponytail: dato viejo en emergencia = peligroso. Filtramos a 48h (mvp.md).
 // TODO(albergue): los albergues sembrados deberían exentarse de este filtro.
