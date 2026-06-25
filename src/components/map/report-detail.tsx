@@ -85,7 +85,11 @@ function PhotoSlider({ photos }: { photos: string[] }) {
           className="h-[260px] w-full cursor-pointer bg-[#f3f4f6] object-cover"
         />
         {lightbox !== null && (
-          <PhotoLightbox photos={photos} initial={lightbox} onClose={() => setLightbox(null)} />
+          <PhotoLightbox
+            photos={photos}
+            initial={lightbox}
+            onClose={() => setLightbox(null)}
+          />
         )}
       </>
     )
@@ -119,7 +123,11 @@ function PhotoSlider({ photos }: { photos: string[] }) {
         </div>
       </div>
       {lightbox !== null && (
-        <PhotoLightbox photos={photos} initial={lightbox} onClose={() => setLightbox(null)} />
+        <PhotoLightbox
+          photos={photos}
+          initial={lightbox}
+          onClose={() => setLightbox(null)}
+        />
       )}
     </>
   )
@@ -173,7 +181,11 @@ function PhotoLightbox({
             key={i}
             className="flex h-full w-full flex-shrink-0 snap-center items-center justify-center"
           >
-            <img src={src} alt="" className="max-h-full max-w-full object-contain" />
+            <img
+              src={src}
+              alt=""
+              className="max-h-full max-w-full object-contain"
+            />
           </div>
         ))}
       </div>
@@ -349,6 +361,7 @@ function Body({
   onShare: () => void
 }) {
   const { type, meta } = report
+  const found = report.status === 'found'
   const t = typeOf(type)
   const photos = report.media.map((m) => m.url)
   const fields = metaFields(type, meta)
@@ -385,6 +398,18 @@ function Body({
             </p>
           </div>
         </div>
+
+        {/* Encontrado: el reporte salió del mapa pero el link directo lo muestra así */}
+        {found && (
+          <div className="mt-4 mx-5 flex items-center gap-2 rounded-2xl border border-[#bbf7d0] bg-[#f0fdf4] px-4 py-3 text-[#15803d]">
+            <BadgeCheck className="size-5 flex-shrink-0" />
+            <span className="text-[14px] font-semibold">
+              {type === 'lostpet'
+                ? '🐾 Esta mascota fue encontrada'
+                : 'Esta persona fue localizada'}
+            </span>
+          </div>
+        )}
 
         {/* Meta por tipo */}
         {fields.length > 0 && (
@@ -433,7 +458,9 @@ function Body({
             <div className="rounded-2xl border border-[#bbf7d0] bg-[#f0fdf4] px-4 py-3">
               <div className="flex items-center gap-2 text-[#15803d]">
                 <BadgeCheck className="size-5 flex-shrink-0" />
-                <span className="text-[13px] font-semibold">Entidad verificada</span>
+                <span className="text-[13px] font-semibold">
+                  Entidad verificada
+                </span>
               </div>
               {report.url && (
                 <a
@@ -458,8 +485,8 @@ function Body({
           )}
         </div>
 
-        {/* Confirmaciones — solo en reportes no verificados */}
-        {!report.verified && (
+        {/* Confirmaciones — solo en reportes no verificados y aún activos */}
+        {!report.verified && !found && (
           <div className="mt-4 px-5">
             <div className="flex items-center justify-between rounded-2xl bg-[#f0fdf9] px-4 py-3">
               <span className="text-[14px] text-[#173a40]">
@@ -480,7 +507,7 @@ function Body({
 
         {/* "Ya apareció" — solo desaparecidos de la comunidad. A los 3 votos el
             aviso se oculta del mapa (el umbral vive en appearReport). */}
-        {type === 'missing' && !report.verified && (
+        {type === 'missing' && !report.verified && !found && (
           <div className="mt-4 px-5">
             <div className="flex items-center justify-between rounded-2xl bg-[#f0fdf4] px-4 py-3">
               <span className="text-[14px] text-[#14532d]">
@@ -551,7 +578,14 @@ function Body({
           className="flex h-[52px] w-full items-center justify-center gap-2 rounded-2xl border border-[#d4dbdc] text-[16px] font-bold text-[#173a40]"
         >
           <Navigation className="size-5" />
-          {['danger', 'road', 'security', 'flood', 'missing', 'lostpet'].includes(type)
+          {[
+            'danger',
+            'road',
+            'security',
+            'flood',
+            'missing',
+            'lostpet',
+          ].includes(type)
             ? 'Ver ubicación'
             : 'Cómo llegar'}
         </a>
@@ -573,11 +607,9 @@ function ShareSheet({
   const [copied, setCopied] = useState(false)
   const url = `${location.origin}/?r=${report.id}`
   const text =
-    report.type === 'missing' &&
-    typeof report.meta.missingName === 'string'
+    report.type === 'missing' && typeof report.meta.missingName === 'string'
       ? `Ayúdanos a encontrar a ${report.meta.missingName}`
-      : report.type === 'lostpet' &&
-          typeof report.meta.petName === 'string'
+      : report.type === 'lostpet' && typeof report.meta.petName === 'string'
         ? `Ayúdanos a encontrar a ${report.meta.petName}`
         : typeOf(report.type).label
   const u = encodeURIComponent(url)

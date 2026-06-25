@@ -1,8 +1,16 @@
 import { expect, test } from 'vitest'
-import { backfillWindow, normalize as normalizePerson } from './sources/desaparecidosterremoto'
+import {
+  backfillWindow,
+  normalize as normalizePerson,
+} from './sources/desaparecidosterremoto'
+import { parseCards, parsePageCount } from './sources/huellascan'
 import { geocode } from './gazetteer'
 import { imageSize } from './image'
-import { type Building, buildingToReport, proxyPhoto } from './sources/terremotovenezuela'
+import {
+  type Building,
+  buildingToReport,
+  proxyPhoto,
+} from './sources/terremotovenezuela'
 
 const building = (over: Partial<Building> = {}): Building => ({
   id: 'b1',
@@ -72,6 +80,55 @@ test('normalize traduce localizado → encontrado (el pipeline lo oculta)', () =
   expect(/encontrad|hallad/i.test(p.status)).toBe(true)
 })
 
+// Fixture: 2 cards con la estructura real de huellascan (img → badge → tel →
+// bloque share con &quot; e id/nombre/ubicación), una Perdida y una Encontrada.
+const HUELLASCAN_HTML = `
+  <button wire:click="gotoPage(3, 'page')">3</button>
+  <img src="https://media.huellascan.com/uploads/earthquake/aaaa1111-2222-3333-4444-555566667777.webp">
+  <span>🔴 Perdido</span>
+  <a href="https://wa.me/04123456789">WhatsApp</a>
+  <div x-data="{ share() {
+    const id = 101;
+    const name = &quot;Mish\\u00ed&quot;;
+    const location = &quot;Catia la mar&quot;;
+  } }"></div>
+  <img src="https://media.huellascan.com/uploads/earthquake/8888aaaa-bbbb-cccc-dddd-eeeeffff0000.webp">
+  <span>🟢 Encontrado</span>
+  <a href="https://wa.me/04147778899">WhatsApp</a>
+  <div x-data="{ share() {
+    const id = 100;
+    const name = &quot;&quot;;
+    const location = &quot;&quot;;
+  } }"></div>
+`
+
+test('parseCards mapea id/nombre/ubicación/foto/contacto y decodifica \\u y &quot;', () => {
+  const cards = parseCards(HUELLASCAN_HTML)
+  expect(cards.length).toBe(2)
+  expect(cards[0]).toMatchObject({
+    externalId: '101',
+    name: 'Mishí', // í decodificado
+    status: 'missing',
+    locationText: 'Catia la mar',
+    contact: '04123456789',
+    sourceUrl: 'https://www.huellascan.com/terremoto/101',
+  })
+  expect(cards[0].photoUrl).toContain('aaaa1111')
+})
+
+test('parseCards: badge 🟢 → encontrado (el pipeline lo da de baja) y nombre vacío → Mascota', () => {
+  const c = parseCards(HUELLASCAN_HTML)[1]
+  expect(c.status).toBe('encontrado')
+  expect(/encontrad|hallad/i.test(c.status)).toBe(true) // matchea el regex del pipeline
+  expect(c.name).toBe('Mascota') // sin nombre no rompe el alta
+  expect(c.photoUrl).toContain('8888aaaa') // foto correcta de su propia card
+})
+
+test('parsePageCount lee el máximo gotoPage del paginador', () => {
+  expect(parsePageCount(HUELLASCAN_HTML)).toBe(3)
+  expect(parsePageCount('<div>sin paginador</div>')).toBe(1)
+})
+
 test('backfillWindow cubre 2..totalPages sin huecos en un ciclo (span par incluido)', () => {
   for (const totalPages of [25, 21, 482, 2]) {
     const perRun = 2
@@ -86,8 +143,12 @@ test('backfillWindow cubre 2..totalPages sin huecos en un ciclo (span par inclui
 })
 
 test('normalize descarta edad inválida (null o 0)', () => {
-  expect(normalizePerson({ id: 'p1', nombre: 'Ana', edad: null })!.age).toBeUndefined()
-  expect(normalizePerson({ id: 'p1', nombre: 'Ana', edad: 0 })!.age).toBeUndefined()
+  expect(
+    normalizePerson({ id: 'p1', nombre: 'Ana', edad: null })!.age,
+  ).toBeUndefined()
+  expect(
+    normalizePerson({ id: 'p1', nombre: 'Ana', edad: 0 })!.age,
+  ).toBeUndefined()
 })
 
 test('geocode matchea ciudad con precisión city', () => {

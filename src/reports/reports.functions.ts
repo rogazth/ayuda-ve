@@ -1,6 +1,6 @@
 import { createServerFn } from '@tanstack/react-start'
 import { getRequestHeader, getRequestIP } from '@tanstack/react-start/server'
-import { and, asc, desc, eq, gte, lte, ne, or, sql } from 'drizzle-orm'
+import { and, asc, desc, eq, gte, inArray, lte, ne, or, sql } from 'drizzle-orm'
 import { getDb } from '../db'
 import { comments, media, reportConfirms, reports } from '../db/schema'
 import { TYPES } from './reports'
@@ -15,10 +15,12 @@ function clientUa(): string {
 }
 
 // ponytail: dato viejo en emergencia = peligroso. Filtramos a 48h (mvp.md).
-// Excepción: los desaparecidos (missing) son un registro de pie, no caducan a
-// 48h — se ocultan cuando la fuente los marca localizado, no por antigüedad.
+// Excepción: desaparecidos (missing) y mascotas perdidas (lostpet) son registro
+// de pie, no caducan a 48h — se ocultan cuando la fuente los marca encontrados
+// (status='found'), no por antigüedad.
 // TODO(albergue): los albergues sembrados deberían exentarse de este filtro.
 const FRESH_MS = 48 * 60 * 60 * 1000
+const STANDING_TYPES = ['missing', 'lostpet'] // exentos del corte de 48h
 // Alertas de seguridad expiran en 12h — son eventos puntuales, no permanentes.
 const SECURITY_TTL_MS = 12 * 60 * 60 * 1000
 
@@ -56,10 +58,16 @@ export const fetchReportsInBounds = createServerFn({ method: 'GET' })
           lte(reports.lat, data.n),
           gte(reports.lng, data.w),
           lte(reports.lng, data.e),
-          // missing exento del corte de 48h (registro de pie); el resto sí caduca
-          or(eq(reports.type, 'missing'), gte(reports.createdAt, cutoff)),
+          // missing/lostpet exentos del corte de 48h (registro de pie); el resto sí caduca
+          or(
+            inArray(reports.type, STANDING_TYPES),
+            gte(reports.createdAt, cutoff),
+          ),
           // alertas de seguridad expiran en 12h
-          or(ne(reports.type, 'security'), gte(reports.createdAt, securityCutoff)),
+          or(
+            ne(reports.type, 'security'),
+            gte(reports.createdAt, securityCutoff),
+          ),
         ),
       )
       .orderBy(desc(reports.createdAt))
@@ -119,7 +127,12 @@ type JsonValue =
   | JsonValue[]
   | { [k: string]: JsonValue }
 
-export type MediaItem = { id: string; url: string; width: number; height: number }
+export type MediaItem = {
+  id: string
+  url: string
+  width: number
+  height: number
+}
 
 export type ReportDetail = {
   id: string
@@ -132,6 +145,7 @@ export type ReportDetail = {
   contact: string | null
   url: string | null
   verified: boolean
+  status: string // 'visible' | 'found' — el detalle pinta badge si 'found'
   createdAt: number
   meta: Record<string, JsonValue>
   media: MediaItem[]
@@ -149,7 +163,14 @@ export const fetchReport = createServerFn({ method: 'GET' })
       await db
         .select()
         .from(reports)
-        .where(and(eq(reports.id, data.id), eq(reports.status, 'visible')))
+        // 'found' incluido: un reporte encontrado sale del mapa pero su link
+        // directo sigue resolviendo (con badge). 'hidden' (moderación) sí queda fuera.
+        .where(
+          and(
+            eq(reports.id, data.id),
+            inArray(reports.status, ['visible', 'found']),
+          ),
+        )
         .limit(1)
     ).at(0)
     if (!row) return null
@@ -177,6 +198,7 @@ export const fetchReport = createServerFn({ method: 'GET' })
       contact: row.contact,
       url: row.url ?? null,
       verified: row.verified,
+      status: row.status,
       createdAt: row.createdAt.getTime(),
       meta,
       media: mediaRows.map((m) => ({
@@ -204,7 +226,8 @@ export const confirmReport = createServerFn({ method: 'POST' })
         .from(reports)
         .where(eq(reports.id, data.id))
         .limit(1)
-      if (report?.creatorIp && report.creatorIp === ip) return { ok: false, reason: 'self' as const }
+      if (report?.creatorIp && report.creatorIp === ip)
+        return { ok: false, reason: 'self' as const }
     }
 
     // Dedup: una confirmación por IP por reporte
@@ -212,7 +235,9 @@ export const confirmReport = createServerFn({ method: 'POST' })
       const existing = await db
         .select({ id: reportConfirms.id })
         .from(reportConfirms)
-        .where(and(eq(reportConfirms.reportId, data.id), eq(reportConfirms.ip, ip)))
+        .where(
+          and(eq(reportConfirms.reportId, data.id), eq(reportConfirms.ip, ip)),
+        )
         .limit(1)
       if (existing.length) return { ok: false, reason: 'already' as const }
     }

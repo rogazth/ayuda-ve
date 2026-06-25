@@ -1,10 +1,11 @@
 import { getDb } from '../db'
 import { ingestPerson } from './pipeline'
 import { desaparecidosterremoto } from './sources/desaparecidosterremoto'
+import { huellascan } from './sources/huellascan'
 import type { Source } from './types'
 
 // Añadir un scraper = escribir su módulo y meterlo aquí.
-const SOURCES: Array<Source> = [desaparecidosterremoto]
+const SOURCES: Array<Source> = [desaparecidosterremoto, huellascan]
 
 type SourceSummary = {
   source: string
@@ -43,23 +44,26 @@ export async function runScrape(): Promise<Array<SourceSummary>> {
       s.fetched = people.length
       const queue = [...people]
       await Promise.all(
-        Array.from({ length: Math.min(CONCURRENCY, people.length) }, async () => {
-          while (queue.length) {
-            const p = queue.shift()!
-            try {
-              const r = await ingestPerson(db, source, p)
-              if (r.kind === 'inserted') s.inserted++
-              else if (r.kind === 'updated') s.updated++
-              else {
+        Array.from(
+          { length: Math.min(CONCURRENCY, people.length) },
+          async () => {
+            while (queue.length) {
+              const p = queue.shift()!
+              try {
+                const r = await ingestPerson(db, source, p)
+                if (r.kind === 'inserted') s.inserted++
+                else if (r.kind === 'updated') s.updated++
+                else {
+                  s.skipped++
+                  s.reasons[r.reason] = (s.reasons[r.reason] ?? 0) + 1
+                }
+              } catch {
                 s.skipped++
-                s.reasons[r.reason] = (s.reasons[r.reason] ?? 0) + 1
+                s.reasons.error = (s.reasons.error ?? 0) + 1
               }
-            } catch {
-              s.skipped++
-              s.reasons.error = (s.reasons.error ?? 0) + 1
             }
-          }
-        }),
+          },
+        ),
       )
     } catch (e) {
       s.error = e instanceof Error ? e.message : String(e)

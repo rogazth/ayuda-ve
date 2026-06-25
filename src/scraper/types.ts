@@ -20,5 +20,6 @@ export type RawPerson = {
 export type Source = {
   id: string // ej. 'venezuelatebusca' — se guarda en reports.external_source
   label: string
+  type?: string // tipo de reporte (reports.type). Default 'missing' (personas)
   fetchPeople: () => Promise<Array<RawPerson>>
 }

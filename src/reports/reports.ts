@@ -447,6 +447,7 @@ const META_SPECS: Record<string, [key: string, label: string][]> = {
   lostpet: [
     ['petName', 'Nombre'],
     ['species', 'Especie'],
+    ['location', 'Zona'],
   ],
   wifi: [
     ['available', 'Disponible'],

@@ -57,7 +57,10 @@ export async function ingestPerson(
       .select({ id: reports.id })
       .from(reports)
       .where(
-        and(eq(reports.externalSource, source.id), eq(reports.externalId, p.externalId)),
+        and(
+          eq(reports.externalSource, source.id),
+          eq(reports.externalId, p.externalId),
+        ),
       )
       .limit(1)
   ).at(0)
@@ -68,9 +71,12 @@ export async function ingestPerson(
     return { kind: 'skipped', reason: 'geo' }
   }
 
+  // Las mascotas (lostpet) guardan el nombre en petName; las personas en
+  // missingName. El detalle (reports.ts) lee la clave según el tipo.
+  const type = source.type ?? 'missing'
   const meta = JSON.stringify({
     source: source.id,
-    missingName: p.name,
+    [type === 'lostpet' ? 'petName' : 'missingName']: p.name,
     age: p.age,
     gender: p.gender,
     status: p.status,
@@ -85,12 +91,15 @@ export async function ingestPerson(
   // descubierto no se re-anuncia en el poll (mata el burst). Los missing ya no
   // caducan a 48h (reports.functions.ts), así que envejecer no los esconde.
   const common = {
-    type: 'missing' as const,
+    type,
     title: p.name,
     description: p.description ?? '',
     contact: p.contact ?? null,
     url: p.sourceUrl ?? null,
-    status: found ? 'hidden' : 'visible',
+    // 'found' (no 'hidden'): sale del mapa/lista (que filtran ='visible') pero el
+    // link directo sigue resolviendo con badge de encontrado. 'hidden' queda solo
+    // para moderación (flags/votos), que sí debe ser inalcanzable.
+    status: found ? 'found' : 'visible',
     verified: false,
     meta,
     externalSource: source.id,
@@ -102,7 +111,11 @@ export async function ingestPerson(
     await db.update(reports).set(common).where(eq(reports.id, existing.id))
     // backfill de foto si quedó sin media en una corrida previa
     const hasMedia = (
-      await db.select({ id: media.id }).from(media).where(eq(media.reportId, existing.id)).limit(1)
+      await db
+        .select({ id: media.id })
+        .from(media)
+        .where(eq(media.reportId, existing.id))
+        .limit(1)
     ).length
     if (!hasMedia && p.photoUrl) {
       const img = await storeImage(existing.id, p.photoUrl)
@@ -120,9 +133,12 @@ export async function ingestPerson(
   let img: Awaited<ReturnType<typeof storeImage>> = null
   const id = crypto.randomUUID()
   if (p.photoUrl) img = await storeImage(id, p.photoUrl)
-  if (REQUIRE_IMAGE && !img) return { kind: 'skipped', reason: p.photoUrl ? 'photo-failed' : 'no-photo' }
+  if (REQUIRE_IMAGE && !img)
+    return { kind: 'skipped', reason: p.photoUrl ? 'photo-failed' : 'no-photo' }
 
-  await db.insert(reports).values({ id, lat: geo!.lat, lng: geo!.lng, ...common })
+  await db
+    .insert(reports)
+    .values({ id, lat: geo!.lat, lng: geo!.lng, ...common })
   if (img) await db.insert(media).values({ ...img, reportId: id, position: 0 })
   return { kind: 'inserted' }
 }
