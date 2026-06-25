@@ -1,5 +1,5 @@
 import { expect, test } from 'vitest'
-import { normalize as normalizePerson } from './sources/desaparecidosterremoto'
+import { backfillWindow, normalize as normalizePerson } from './sources/desaparecidosterremoto'
 import { geocode } from './gazetteer'
 import { imageSize } from './image'
 import { type Building, buildingToReport, proxyPhoto } from './sources/terremotovenezuela'
@@ -70,6 +70,19 @@ test('normalize traduce localizado → encontrado (el pipeline lo oculta)', () =
   const p = normalizePerson({ id: 'p1', nombre: 'Ana', estado: 'localizado' })!
   expect(p.status).toBe('encontrado')
   expect(/encontrad|hallad/i.test(p.status)).toBe(true)
+})
+
+test('backfillWindow cubre 2..totalPages sin huecos en un ciclo (span par incluido)', () => {
+  for (const totalPages of [25, 21, 482, 2]) {
+    const perRun = 2
+    const numBlocks = Math.ceil((totalPages - 1) / perRun)
+    const seen = new Set<number>()
+    for (let run = 0; run < numBlocks; run++)
+      for (const p of backfillWindow(totalPages, run, perRun)) seen.add(p)
+    for (let p = 2; p <= totalPages; p++) expect(seen.has(p)).toBe(true) // sin huecos
+    expect([...seen].every((p) => p >= 2 && p <= totalPages)).toBe(true) // nunca fuera de rango
+  }
+  expect(backfillWindow(1, 99, 2)).toEqual([]) // sin backlog
 })
 
 test('normalize descarta edad inválida (null o 0)', () => {

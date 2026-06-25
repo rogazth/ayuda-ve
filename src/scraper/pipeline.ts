@@ -80,8 +80,10 @@ export async function ingestPerson(
     ...p.extra,
   })
 
-  // createdAt re-estampado: el mapa filtra a 48h; mientras la fuente liste a
-  // la persona la mantenemos "fresca"; si la quita, envejece y cae sola.
+  // createdAt NO se re-estampa: es el momento de descubrimiento, fijo. En alta cae
+  // al default (unixepoch() = ahora); en update no se toca, así un reporte ya
+  // descubierto no se re-anuncia en el poll (mata el burst). Los missing ya no
+  // caducan a 48h (reports.functions.ts), así que envejecer no los esconde.
   const common = {
     type: 'missing' as const,
     title: p.name,
@@ -93,7 +95,6 @@ export async function ingestPerson(
     meta,
     externalSource: source.id,
     externalId: p.externalId,
-    createdAt: new Date(),
     ...(geo ? { lat: geo.lat, lng: geo.lng } : {}),
   }
 

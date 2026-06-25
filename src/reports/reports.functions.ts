@@ -15,6 +15,8 @@ function clientUa(): string {
 }
 
 // ponytail: dato viejo en emergencia = peligroso. Filtramos a 48h (mvp.md).
+// Excepción: los desaparecidos (missing) son un registro de pie, no caducan a
+// 48h — se ocultan cuando la fuente los marca localizado, no por antigüedad.
 // TODO(albergue): los albergues sembrados deberían exentarse de este filtro.
 const FRESH_MS = 48 * 60 * 60 * 1000
 // Alertas de seguridad expiran en 12h — son eventos puntuales, no permanentes.
@@ -54,7 +56,8 @@ export const fetchReportsInBounds = createServerFn({ method: 'GET' })
           lte(reports.lat, data.n),
           gte(reports.lng, data.w),
           lte(reports.lng, data.e),
-          gte(reports.createdAt, cutoff),
+          // missing exento del corte de 48h (registro de pie); el resto sí caduca
+          or(eq(reports.type, 'missing'), gte(reports.createdAt, cutoff)),
           // alertas de seguridad expiran en 12h
           or(ne(reports.type, 'security'), gte(reports.createdAt, securityCutoff)),
         ),

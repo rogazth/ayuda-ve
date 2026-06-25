@@ -7,16 +7,21 @@ import type { RawPerson, Source } from '../types'
 const API = 'https://desaparecidos-terremoto-api.theempire.tech/api/personas'
 const UA = 'AyudaVE-bot/0.1 (+https://ayudave.com; agregador de desaparecidos)'
 
-// El orden por defecto de la API es createdAt desc (más recientes primero), que
-// es justo la prioridad en una emergencia. Traemos las N más nuevas por corrida;
-// el cron (cada 5 min) + el re-estampado de createdAt + la ventana de 48h del
-// mapa mantienen el flujo fresco. Hay ~41k en total: NO caben todas a la vez en
-// el modelo re-estampar+48h (re-estampar 41k/corrida no entra en presupuesto).
-// ponytail: para barrer el backlog histórico haría falta un cursor persistente;
-// YAGNI hasta que pidan backfill. Knobs: subir MAX_PAGES trae más por corrida
-// (techo real = 1000 subrequests/invocación + Nominatim 1/s en misses de geo).
+// El orden por defecto de la API es createdAt desc (más recientes primero). Cada
+// corrida trae la página 1 (lo más nuevo, flujo en vivo) MÁS un bloque rotatorio
+// de páginas profundas que avanza con el reloj → barre las ~48k del backlog en
+// vez de quedarse clavado en el tope. Ya no re-estampamos createdAt ni filtramos
+// missing a 48h (ver pipeline.ts y reports.functions.ts): los descubiertos se
+// quedan, los localizados se ocultan en el siguiente barrido.
 const PAGE_SIZE = 100
-const MAX_PAGES = 3
+// Páginas de backlog por corrida, ADEMÁS de la página 1. El backlog son altas
+// (descarga foto + put R2 por persona), más pesado que re-scrapear el tope, así
+// que el techo real es 1000 subrequests/invocación + Nominatim 1/s en lugares
+// nuevos. 2 → ~300 personas/corrida (~600 subrequests peor caso); a */2 barre las
+// ~482 páginas en ~8h. Subir si el log [scrape] queda verde; bajar si topa 1000.
+// ponytail: cursor sin estado — aritmética sobre el tiempo, cero tabla/KV/migración.
+const BACKFILL_PAGES = 2
+const CRON_MS = 2 * 60 * 1000 // debe casar con triggers.crons en wrangler.jsonc
 
 type Item = {
   id?: unknown
@@ -84,15 +89,42 @@ export const desaparecidosterremoto: Source = {
   label: 'Desaparecidos Terremoto Venezuela',
   async fetchPeople() {
     const out: Array<RawPerson> = []
-    for (let page = 1; page <= MAX_PAGES; page++) {
-      const data = await fetchPage(page)
-      if (!data?.items?.length) break // intermitencia o fin: corta limpio
-      for (const it of data.items) {
+    const collect = (data: Payload) => {
+      for (const it of data.items ?? []) {
         const rp = normalize(it)
         if (rp) out.push(rp)
       }
-      if (data.totalPages && page >= data.totalPages) break
+    }
+
+    // Página 1 siempre: los desaparecidos más recientes entran de inmediato y
+    // nos da totalPages para situar el cursor.
+    const first = await fetchPage(1)
+    if (!first?.items?.length) return out // intermitencia o vacío: corta limpio
+    collect(first)
+    const totalPages = first.totalPages ?? 1
+    if (totalPages <= 1) return out
+
+    // Ventana rotatoria sobre las páginas 2..totalPages. Cubre todo el backlog
+    // cada ceil(span/BACKFILL_PAGES) corridas y reinicia (re-chequea estados).
+    const runIndex = Math.floor(Date.now() / CRON_MS)
+    for (const p of backfillWindow(totalPages, runIndex, BACKFILL_PAGES)) {
+      const data = await fetchPage(p)
+      if (data?.items?.length) collect(data)
     }
     return out
   },
+}
+
+// Páginas profundas (2..totalPages) a barrer en la corrida `runIndex`. Bloques
+// contiguos de `perRun` que avanzan una posición por corrida → en numBlocks
+// corridas cubren todo sin huecos y reinician. Contiguo a propósito: un stride
+// con módulo par se saltaría la mitad de las páginas. Pura para poder testearla.
+export function backfillWindow(totalPages: number, runIndex: number, perRun: number): Array<number> {
+  if (totalPages <= 1) return []
+  const numBlocks = Math.ceil((totalPages - 1) / perRun)
+  const block = ((runIndex % numBlocks) + numBlocks) % numBlocks
+  const start = 2 + block * perRun
+  const pages: Array<number> = []
+  for (let p = start; p < start + perRun && p <= totalPages; p++) pages.push(p)
+  return pages
 }

@@ -5,9 +5,11 @@
   "compatibility_flags": ["nodejs_compat"],
   "main": "./src/server.ts",
   "triggers": {
-    // cada 5 min para el push inicial (llenar el backfill rápido). Subir a
-    // */30 una vez haya suficientes registros. Corre runScrape() + runDamageScrape().
-    "crons": ["*/5 * * * *"],
+    // cada 2 min: barre el backlog de ~48k desaparecidos (página 1 en vivo +
+    // ventana rotatoria, ~8h por pasada) y refresca daños. Corre runScrape() +
+    // runDamageScrape(). Si cambias este intervalo, ajusta CRON_MS en
+    // desaparecidosterremoto.ts (de ahí sale la posición del cursor).
+    "crons": ["*/2 * * * *"],
   },
   "d1_databases": [
     {
