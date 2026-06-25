@@ -1,6 +1,6 @@
 import { createServerFn } from '@tanstack/react-start'
 import { VE_BOUNDS, parseForecast } from './quakes'
-import type { Forecast, OafForecast, MmiGrid } from './quakes'
+import type { Forecast, OafForecast } from './quakes'
 
 // Sismos desde USGS (fuente pública, sin API key, GeoJSON). Datos verídicos:
 // graficamos lo registrado, no predecimos. Bbox de Venezuela = VE_BOUNDS
@@ -38,7 +38,6 @@ export type QuakeData = {
   quakes: Quake[]
   mainId: string | null
   shakemap: MmiContours | null
-  grid: MmiGrid | null
   forecast: Forecast | null
 }
 
@@ -78,7 +77,6 @@ export const fetchQuakes = createServerFn({ method: 'GET' }).handler(
     )
 
     let shakemap: MmiContours | null = null
-    let grid: MmiGrid | null = null
     let forecast: Forecast | null = null
     if (main) {
       try {
@@ -87,24 +85,19 @@ export const fetchQuakes = createServerFn({ method: 'GET' }).handler(
         ).then((r) => r.json())) as { properties: { products: ProductMap } }
         const prods = detail.properties.products
         const smUrl = prods?.shakemap?.[0]?.contents?.['download/cont_mmi.json']?.url
-        const gridUrl = prods?.shakemap?.[0]?.contents?.['download/coverage_mmi_low_res.covjson']?.url
         const fcUrl = prods?.oaf?.[0]?.contents?.['forecast.json']?.url
-        const [sm, cov, oaf] = await Promise.all([
+        const [sm, oaf] = await Promise.all([
           smUrl ? cached(smUrl).then((r) => r.json()).catch(() => null) : null,
-          gridUrl ? cached(gridUrl).then((r) => r.json()).catch(() => null) : null,
           fcUrl ? cached(fcUrl).then((r) => r.json()).catch(() => null) : null,
         ])
         shakemap = sm as MmiContours | null
-        if (cov?.domain?.axes?.x && cov?.ranges?.MMI?.values) {
-          grid = { x: cov.domain.axes.x, y: cov.domain.axes.y, values: cov.ranges.MMI.values }
-        }
         if (oaf) forecast = parseForecast(oaf as OafForecast)
       } catch {
         // sin detalle igual mostramos los sismos registrados
       }
     }
 
-    return { updated: Date.now(), quakes, mainId: main?.id ?? null, shakemap, grid, forecast }
+    return { updated: Date.now(), quakes, mainId: main?.id ?? null, shakemap, forecast }
   },
 )
 

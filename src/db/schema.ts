@@ -25,6 +25,8 @@ export const reports = sqliteTable(
     confirms: integer('confirms').notNull().default(0),
     flags: integer('flags').notNull().default(0),
     status: text('status').notNull().default('visible'), // visible | hidden
+    contact: text('contact'),
+    meta: text('meta'), // JSON blob con campos específicos por tipo
     ...timestamps(),
   },
   (t) => [index('reports_lat_lng').on(t.lat, t.lng)], // bbox del viewport

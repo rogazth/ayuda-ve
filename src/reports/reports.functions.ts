@@ -2,6 +2,7 @@ import { createServerFn } from '@tanstack/react-start'
 import { and, desc, eq, gte, lte } from 'drizzle-orm'
 import { getDb } from '../db'
 import { reports } from '../db/schema'
+import { TYPES } from './reports'
 
 // ponytail: dato viejo en emergencia = peligroso. Filtramos a 48h (mvp.md).
 // TODO(albergue): los albergues sembrados deberían exentarse de este filtro.
@@ -47,4 +48,39 @@ export const fetchReportsInBounds = createServerFn({ method: 'GET' })
       .limit(200)
 
     return rows.map((r) => ({ ...r, createdAt: r.createdAt.getTime() }))
+  })
+
+type NewReport = {
+  type: string
+  lat: number
+  lng: number
+  description?: string
+  contact?: string
+  meta?: string
+}
+
+export const createReport = createServerFn({ method: 'POST' })
+  .validator((d: NewReport): NewReport => ({
+    type: String(d.type),
+    lat: Number(d.lat),
+    lng: Number(d.lng),
+    description: d.description ?? '',
+    contact: d.contact,
+    meta: d.meta,
+  }))
+  .handler(async ({ data }) => {
+    const db = getDb()
+    const [row] = await db
+      .insert(reports)
+      .values({
+        type: data.type,
+        title: TYPES[data.type]?.label ?? data.type,
+        description: data.description ?? '',
+        lat: data.lat,
+        lng: data.lng,
+        contact: data.contact ?? null,
+        meta: data.meta ?? null,
+      })
+      .returning({ id: reports.id })
+    return row
   })

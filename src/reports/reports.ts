@@ -2,32 +2,37 @@
 
 type TypeMeta = { label: string; color: string; svg: string }
 
-// svg = markup interno (icono blanco) para divIcon del pin y para el cuadro de la lista.
+// svg = markup interno (icono blanco) para divIcon del pin.
 export const TYPES: Record<string, TypeMeta> = {
-  heridos: {
-    label: 'Persona herida',
+  atrapada: {
+    label: 'Persona atrapada',
     color: '#E03131',
     svg: '<path d="M10 3h4v7h7v4h-7v7h-4v-7H3v-4h7z" fill="#fff"/>',
   },
-  derrumbe: {
-    label: 'Derrumbe / daño',
+  desaparecida: {
+    label: 'Persona desaparecida',
     color: '#F08C00',
-    svg: '<path d="M12 4 22 20H2Z" fill="none" stroke="#fff" stroke-width="2.4" stroke-linejoin="round" stroke-linecap="round"/><path d="M12 10v4" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round"/>',
+    svg: '<circle cx="12" cy="7" r="4" fill="#fff"/><path d="M5 21v-1a7 7 0 0 1 14 0v1" fill="#fff"/>',
   },
-  servicios: {
-    label: 'Corte de servicios',
-    color: '#F2B705',
-    svg: '<path d="M13 2 4 14h6l-1 8 9-12h-6z" fill="#fff"/>',
+  peligro: {
+    label: 'Zona de peligro',
+    color: '#E8590C',
+    svg: '<path d="M12 4 22 20H2Z" fill="none" stroke="#fff" stroke-width="2.4" stroke-linejoin="round"/><path d="M12 10v4M12 17h.01" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round"/>',
   },
-  albergue: {
-    label: 'Albergue / ayuda',
+  necesito: {
+    label: 'Necesito ayuda',
     color: '#2F7BD6',
-    svg: '<path d="M12 3 21 11h-2v9H5v-9H3z" fill="#fff"/>',
+    svg: '<path d="M12 20V7M6 13l6 7 6-7" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" fill="none"/>',
   },
-  otro: {
-    label: 'Otro',
-    color: '#868E96',
-    svg: '<path d="M10 3h4v5h5v4h-5v5h-4v-5H5v-4h5z" fill="#fff"/>',
+  ofrezco: {
+    label: 'Ofrezco ayuda',
+    color: '#2F9E44',
+    svg: '<path d="M12 4v13M6 11l6-7 6 7" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" fill="none"/>',
+  },
+  apoyo: {
+    label: 'Punto de apoyo',
+    color: '#7048E8',
+    svg: '<path d="M12 3 21 11h-2v9H5v-9H3z" fill="#fff"/>',
   },
 }
 

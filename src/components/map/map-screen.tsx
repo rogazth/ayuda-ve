@@ -15,42 +15,69 @@ import { fmtAge, typeOf } from '../../reports/reports'
 import { fetchReportsInBounds } from '../../reports/reports.functions'
 import { reverseEstado } from '../../geo/geo.functions'
 import { fetchQuakes } from '../../quakes/quakes.functions'
-import type { Quake, QuakeData } from '../../quakes/quakes.functions'
-import { VE_BOUNDS, esPlace, inVenezuela, magColor, mmiToRgb } from '../../quakes/quakes'
-import type { MmiGrid } from '../../quakes/quakes'
+import type { Quake, QuakeData, MmiContours } from '../../quakes/quakes.functions'
+import { VE_BOUNDS, esPlace, inVenezuela, magColor } from '../../quakes/quakes'
 import type { Pin, View, Data } from './types'
 import { QuakeDrawer } from './quake-drawer'
 import { HelpDialog } from './help-dialog'
 
-// Renderiza la grilla MMI de USGS como imageOverlay para zonas rellenas sin artefactos.
-// CoverageJSON: eje y va de sur a norte; canvas va de norte a sur → se invierte.
-function MmiGridLayer({ grid }: { grid: MmiGrid }) {
+// Renderiza los contornos MMI como anillos (evenodd) en canvas → imageOverlay.
+// Cada zona se pinta UNA sola vez (outer contour - inner contour) → sin opacidad apilada.
+// El bbox se deriva de los datos → sin bordes rectangulares.
+function ShakemapLayer({ shakemap }: { shakemap: MmiContours }) {
   const map = useMap()
   useEffect(() => {
-    const { x, y, values } = grid
-    const canvas = document.createElement('canvas')
-    canvas.width = x.num
-    canvas.height = y.num
-    const ctx = canvas.getContext('2d')!
-    const img = ctx.createImageData(x.num, y.num)
-    for (let i = 0; i < values.length; i++) {
-      const mmi = values[i]
-      const xi = i % x.num
-      const yi = Math.floor(i / x.num)
-      const row = y.num - 1 - yi
-      const idx = (row * x.num + xi) * 4
-      const [r, g, b] = mmiToRgb(mmi)
-      img.data[idx] = r
-      img.data[idx + 1] = g
-      img.data[idx + 2] = b
-      img.data[idx + 3] = mmi < 2 ? 0 : 140
+    // Bbox de todos los contornos
+    let minLng = Infinity, maxLng = -Infinity, minLat = Infinity, maxLat = -Infinity
+    for (const f of shakemap.features) {
+      for (const line of f.geometry.coordinates) {
+        for (const [lng, lat] of line as [number, number][]) {
+          if (lng < minLng) minLng = lng
+          if (lng > maxLng) maxLng = lng
+          if (lat < minLat) minLat = lat
+          if (lat > maxLat) maxLat = lat
+        }
+      }
     }
-    ctx.putImageData(img, 0, 0)
-    const url = canvas.toDataURL()
-    const overlay = L.imageOverlay(url, [[y.start, x.start], [y.stop, x.stop]], { opacity: 1 })
+
+    const W = 512
+    const H = Math.round(W * (maxLat - minLat) / (maxLng - minLng))
+    const toX = (lng: number) => ((lng - minLng) / (maxLng - minLng)) * W
+    const toY = (lat: number) => ((maxLat - lat) / (maxLat - minLat)) * H
+
+    const canvas = document.createElement('canvas')
+    canvas.width = W
+    canvas.height = H
+    const ctx = canvas.getContext('2d')!
+
+    // Cada zona se pinta como anillo (outer - inner) con evenodd para no apilar capas.
+    // Ordenado por MMI ascendente: sorted[i] es el outer, sorted[i+1] el inner cutout.
+    const sorted = [...shakemap.features].sort((a, b) => a.properties.value - b.properties.value)
+    const drawContour = (f: MmiContours['features'][number]) => {
+      for (const line of f.geometry.coordinates) {
+        const coords = line as [number, number][]
+        ctx.moveTo(toX(coords[0][0]), toY(coords[0][1]))
+        for (let i = 1; i < coords.length; i++)
+          ctx.lineTo(toX(coords[i][0]), toY(coords[i][1]))
+        ctx.closePath()
+      }
+    }
+    for (let i = 0; i < sorted.length; i++) {
+      ctx.beginPath()
+      drawContour(sorted[i])
+      if (i + 1 < sorted.length) drawContour(sorted[i + 1]) // recorta el interior
+      const hex = sorted[i].properties.color || '#888'
+      const r = parseInt(hex.slice(1, 3), 16)
+      const g = parseInt(hex.slice(3, 5), 16)
+      const b = parseInt(hex.slice(5, 7), 16)
+      ctx.fillStyle = `rgba(${r},${g},${b},0.5)`
+      ctx.fill('evenodd')
+    }
+
+    const overlay = L.imageOverlay(canvas.toDataURL(), [[minLat, minLng], [maxLat, maxLng]])
     overlay.addTo(map)
     return () => { overlay.remove() }
-  }, [map, grid])
+  }, [map, shakemap])
   return null
 }
 
@@ -339,7 +366,7 @@ export default function MapScreen() {
           ))}
         {view === 'sismos' && quakes && (
           <>
-            {quakes.grid != null && <MmiGridLayer grid={quakes.grid} />}
+            {quakes.shakemap != null && <ShakemapLayer shakemap={quakes.shakemap} />}
             {quakes.quakes.map((q) => (
               <Marker
                 key={q.id}

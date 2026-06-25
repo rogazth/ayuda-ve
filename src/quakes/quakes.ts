@@ -1,45 +1,6 @@
 // Lógica pura de sismos: color/tamaño por magnitud y extracción del pronóstico
 // oficial USGS. Sin Cloudflare ni react-leaflet → testeable directo (vitest).
 
-// Grilla MMI de USGS (CoverageJSON simplificado).
-export type MmiGrid = {
-  x: { start: number; stop: number; num: number }
-  y: { start: number; stop: number; num: number }
-  values: number[]
-}
-
-// Escala de colores MMI (Modified Mercalli Intensity) de USGS.
-// Los stops coinciden con los colores del ShakeMap oficial.
-const MMI_STOPS: [number, [number, number, number]][] = [
-  [1, [255, 255, 255]],
-  [2, [160, 229, 255]],
-  [3, [127, 200, 245]],
-  [4, [127, 200, 127]],
-  [5, [255, 255, 0]],
-  [6, [255, 200, 0]],
-  [7, [255, 145, 0]],
-  [8, [255, 0, 0]],
-  [10, [128, 0, 0]],
-]
-
-export function mmiToRgb(mmi: number): [number, number, number] {
-  const stops = MMI_STOPS
-  if (mmi <= stops[0][0]) return stops[0][1]
-  for (let i = 1; i < stops.length; i++) {
-    const [m0, c0] = stops[i - 1]
-    const [m1, c1] = stops[i]
-    if (mmi <= m1) {
-      const t = (mmi - m0) / (m1 - m0)
-      return [
-        Math.round(c0[0] + t * (c1[0] - c0[0])),
-        Math.round(c0[1] + t * (c1[1] - c0[1])),
-        Math.round(c0[2] + t * (c1[2] - c0[2])),
-      ]
-    }
-  }
-  return stops[stops.length - 1][1]
-}
-
 // Escala tipo USGS: color por severidad, radio crece con la energía.
 export function magColor(m: number) {
   if (m >= 6) return '#d7263d'

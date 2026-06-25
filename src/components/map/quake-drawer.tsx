@@ -1,13 +1,15 @@
 import { useState } from 'react'
 import { Drawer } from 'vaul'
-import { Activity, ExternalLink } from 'lucide-react'
+import { Activity, ExternalLink, X } from 'lucide-react'
 import { fmtAge } from '../../reports/reports'
 import type { Quake, QuakeData } from '../../quakes/quakes.functions'
 import { buildSources, esPlace, magColor } from '../../quakes/quakes'
 import { Sources } from './sources'
 
 // Hoja del terremoto: media pantalla por defecto, expandible arrastrando.
-const QSNAPS: (number | string)[] = [0.55, 0.92]
+// SNAP_MIN = solo título + X (el mapa queda visible con el heatmap).
+const SNAP_MIN = '62px'
+const QSNAPS: (number | string)[] = [SNAP_MIN, 0.55, 0.92]
 
 // Color de severidad legible como texto: los tonos claros (amarillo/lima) se
 // oscurecen para pasar contraste sobre blanco. ponytail: ajustar si cambia magColor.
@@ -29,19 +31,17 @@ export function QuakeDrawer({
   main: Quake | null
   onClose: () => void
 }) {
-  const [snap, setSnap] = useState<number | string | null>(QSNAPS[0])
+  const [snap, setSnap] = useState<number | string | null>(0.55)
+  const collapsed = snap === SNAP_MIN
   return (
     <Drawer.Root
       open
       modal={false}
-      dismissible
+      dismissible={false}
       handleOnly
       snapPoints={QSNAPS}
       activeSnapPoint={snap}
       setActiveSnapPoint={setSnap}
-      onOpenChange={(o) => {
-        if (!o) onClose()
-      }}
     >
       <Drawer.Portal>
         {/* --ave-sheet-vh = alto del snap activo: la lista recorta a la
@@ -56,9 +56,30 @@ export function QuakeDrawer({
         >
           <Drawer.Handle className="mx-auto my-[10px] h-[5px] w-[38px] flex-[0_0_auto] rounded-[3px] bg-[#dadde0]" />
           <Drawer.Title className="sr-only">Terremoto</Drawer.Title>
-          <div className="flex min-h-0 flex-1 flex-col overflow-hidden px-[18px] pb-[calc(12px+env(safe-area-inset-bottom))]">
-            <QuakeSheet data={data} main={main} />
+
+          {/* Header siempre visible: en collapsed es lo único que se ve */}
+          <div className="flex flex-[0_0_auto] items-center gap-[8px] px-[18px] pb-[10px]">
+            <Activity className="h-[18px] w-[18px] flex-[0_0_auto] text-[#0e9c8f]" />
+            <span className="flex-1 text-[17px] font-semibold">Terremoto</span>
+            {data && (
+              <span className="rounded-full bg-[#0e9c8f]/10 px-[9px] py-[2px] text-[13px] font-bold text-[#0e9c8f]">
+                {data.quakes.length}
+              </span>
+            )}
+            <button
+              onClick={onClose}
+              aria-label="Cerrar"
+              className="ml-[4px] flex h-[30px] w-[30px] flex-[0_0_auto] items-center justify-center rounded-full bg-[#f0f2f3] text-[#737f82] hover:bg-[#e3e6e8]"
+            >
+              <X className="h-[16px] w-[16px]" />
+            </button>
           </div>
+
+          {!collapsed && (
+            <div className="flex min-h-0 flex-1 flex-col overflow-hidden px-[18px] pb-[calc(12px+env(safe-area-inset-bottom))]">
+              <QuakeSheet data={data} main={main} />
+            </div>
+          )}
         </Drawer.Content>
       </Drawer.Portal>
     </Drawer.Root>
@@ -89,12 +110,6 @@ function QuakeSheet({
 
   return (
     <>
-      <h2 className="mb-[2px] flex items-center gap-[8px] text-[17px]">
-        <Activity className="h-[18px] w-[18px] text-[#0e9c8f]" /> Terremoto
-        <span className="rounded-full bg-[#0e9c8f]/10 px-[9px] py-[2px] text-[13px] font-bold text-[#0e9c8f]">
-          {data.quakes.length}
-        </span>
-      </h2>
       <p className="mb-[14px] flex justify-between gap-[8px] text-[12px] text-[#737f82]">
         <span>Últimos 7 días en Venezuela</span>
         <span>Datos: USGS</span>
