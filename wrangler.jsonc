@@ -3,7 +3,12 @@
   "name": "ayuda-ve",
   "compatibility_date": "2025-09-02",
   "compatibility_flags": ["nodejs_compat"],
-  "main": "@tanstack/react-start/server-entry",
+  "main": "./src/server.ts",
+  "triggers": {
+    // cada 5 min para el push inicial (llenar el backfill rápido). Subir a
+    // */30 una vez haya suficientes registros. Corre runScrape() + runDamageScrape().
+    "crons": ["*/5 * * * *"],
+  },
   "d1_databases": [
     {
       "binding": "DB",

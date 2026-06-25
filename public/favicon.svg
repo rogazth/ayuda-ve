@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <defs>
+    <path id="s" d="M0,-3 0.71,-0.97 2.85,-0.93 1.14,0.37 1.76,2.43 0,1.2 -1.76,2.43 -1.14,0.37 -2.85,-0.93 -0.71,-0.97Z" fill="#fff"/>
+  </defs>
+  <!-- bandera de Venezuela: tres franjas + arco de 7 estrellas, convexidad arriba -->
+  <rect width="64" height="21.33" fill="#fcdd09"/>
+  <rect y="21.33" width="64" height="21.34" fill="#00247d"/>
+  <rect y="42.67" width="64" height="21.33" fill="#cf142b"/>
+  <use href="#s" x="10.55" y="36.0"/>
+  <use href="#s" x="16.61" y="30.61"/>
+  <use href="#s" x="23.97" y="27.18"/>
+  <use href="#s" x="32.0" y="26.0"/>
+  <use href="#s" x="40.03" y="27.18"/>
+  <use href="#s" x="47.39" y="30.61"/>
+  <use href="#s" x="53.45" y="36.0"/>
+</svg>

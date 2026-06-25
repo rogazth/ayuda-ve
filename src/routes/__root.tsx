@@ -52,12 +52,20 @@ export const Route = createRootRoute({
           'Mapa colaborativo de reportes de emergencia en Venezuela. Reporta y consulta incidentes, sismos y alertas en tiempo real.',
       },
       { name: 'twitter:image', content: 'https://ayudave.com/og.png' },
+      { name: 'theme-color', content: '#4fb8b2' },
+      { name: 'mobile-web-app-capable', content: 'yes' },
+      { name: 'apple-mobile-web-app-capable', content: 'yes' },
+      { name: 'apple-mobile-web-app-title', content: 'AyudaVE' },
     ],
     links: [
       {
         rel: 'stylesheet',
         href: appCss,
       },
+      { rel: 'icon', type: 'image/svg+xml', href: '/favicon.svg' },
+      { rel: 'icon', type: 'image/x-icon', href: '/favicon.ico' },
+      { rel: 'manifest', href: '/manifest.json' },
+      { rel: 'apple-touch-icon', href: '/logo192.png' },
     ],
   }),
   shellComponent: RootDocument,
@@ -67,6 +75,13 @@ function RootDocument({ children }: { children: React.ReactNode }) {
   // ponytail: dev-only, client-side import (touches window) — react-grab toolbar
   useEffect(() => {
     if (import.meta.env.DEV) import('react-grab')
+  }, [])
+
+  // Registrar el SW solo en prod: en dev interfiere con el HMR de Vite.
+  useEffect(() => {
+    if (!import.meta.env.DEV && 'serviceWorker' in navigator) {
+      navigator.serviceWorker.register('/sw.js').catch(() => {})
+    }
   }, [])
 
   return (

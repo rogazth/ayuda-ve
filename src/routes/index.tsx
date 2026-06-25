@@ -1,10 +1,20 @@
 import { createFileRoute } from '@tanstack/react-router'
+import { createServerFn } from '@tanstack/react-start'
 import { Suspense, lazy, useEffect, useState } from 'react'
 import { fetchReport } from '../reports/reports.functions'
 import type { ReportDetail } from '../reports/reports.functions'
 import { typeOf } from '../reports/reports'
 
 type Og = { title: string; description: string; image: string }
+
+const fetchOg = createServerFn({ method: 'GET' })
+  .validator((id: string) => id)
+  .handler(async ({ data: id }) => {
+    const { getRequestUrl } = await import('@tanstack/react-start/server')
+    const report = await fetchReport({ data: { id } })
+    if (!report) return null
+    return ogFor(report, getRequestUrl().origin)
+  })
 
 // Meta OG por reporte. Solo se construye en SSR: los crawlers de redes
 // (WhatsApp/FB/X) hacen un GET fresco a /?r=<id> y leen el <head>. En cliente el
@@ -31,17 +41,11 @@ export const Route = createFileRoute('/')({
   loaderDeps: ({ search }) => ({ r: search.r }),
   loader: async ({ deps }): Promise<{ og: Og | null }> => {
     if (!deps.r) return { og: null }
-    if (import.meta.env.SSR) {
-      try {
-        const { getRequestUrl } = await import('@tanstack/react-start/server')
-        const report = await fetchReport({ data: { id: deps.r } })
-        if (!report) return { og: null }
-        return { og: ogFor(report, getRequestUrl().origin) }
-      } catch {
-        return { og: null }
-      }
+    try {
+      return { og: await fetchOg({ data: deps.r }) }
+    } catch {
+      return { og: null }
     }
-    return { og: null }
   },
   head: ({ loaderData }) => {
     const og = loaderData?.og

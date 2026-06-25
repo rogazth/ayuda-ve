@@ -7,6 +7,7 @@ import {
   haversine,
   isValidVePhone,
   metaFields,
+  newFreshPins,
   phoneIntl,
   typeOf,
 } from './reports'
@@ -67,6 +68,30 @@ test('canContact: danger nunca, resto solo con teléfono', () => {
   expect(canContact('trapped', '4141234567')).toBe(true)
   expect(canContact('trapped', null)).toBe(false)
   expect(canContact('danger', '4141234567')).toBe(false)
+})
+
+test('newFreshPins: solo ids nuevos y recientes; siembra sin repetir', () => {
+  const now = 1_000_000
+  const FRESH = 120_000 // 2 min
+  const seen = new Set<string>()
+  const p = (id: string, age: number) => ({ id, createdAt: now - age })
+
+  // Primera pasada: todos "nuevos" pero solo los frescos cuentan; siembra seen.
+  const first = newFreshPins(
+    [p('a', 10_000), p('b', 300_000)],
+    seen,
+    now,
+    FRESH,
+  )
+  expect(first.map((x) => x.id)).toEqual(['a']) // b es viejo (5 min)
+  expect(seen.has('a') && seen.has('b')).toBe(true) // ambos sembrados
+
+  // Segunda pasada: 'a' ya visto (no suena), 'c' nuevo y fresco sí.
+  const second = newFreshPins([p('a', 12_000), p('c', 5_000)], seen, now, FRESH)
+  expect(second.map((x) => x.id)).toEqual(['c'])
+
+  // Pan a zona con reporte viejo no visto → no suena.
+  expect(newFreshPins([p('d', 999_999)], seen, now, FRESH)).toEqual([])
 })
 
 test('inVenezuela acepta el país y rechaza el exterior', () => {

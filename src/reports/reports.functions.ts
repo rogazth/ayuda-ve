@@ -169,7 +169,9 @@ export const fetchReport = createServerFn({ method: 'GET' })
       meta,
       media: mediaRows.map((m) => ({
         id: m.id,
-        url: `https://media.ayudave.com/${m.key}`,
+        url: import.meta.env.DEV
+          ? `/media/${m.key}`
+          : `https://media.ayudave.com/${m.key}`,
         width: m.width,
         height: m.height,
       })),
@@ -235,4 +237,28 @@ export const flagReport = createServerFn({ method: 'POST' })
       await db
         .insert(comments)
         .values({ reportId: data.id, text: `[reporte] ${reason}` })
+  })
+
+// "Ya apareció": solo para desaparecidos de la comunidad. Auto-oculta a los 3
+// votos (mismo mecanismo que flags → status='hidden', que las queries ya filtran).
+// ponytail: anti-doble-voto en el cliente (localStorage), como flag. El where
+// blinda contra ocultar reportes verificados o de otro tipo aunque pasen el id.
+const APPEARED_HIDE = 3
+export const appearReport = createServerFn({ method: 'POST' })
+  .validator((d: { id: string }) => ({ id: String(d.id) }))
+  .handler(async ({ data }) => {
+    const db = getDb()
+    await db
+      .update(reports)
+      .set({
+        appeared: sql`${reports.appeared} + 1`,
+        status: sql`case when ${reports.appeared} + 1 >= ${APPEARED_HIDE} then 'hidden' else ${reports.status} end`,
+      })
+      .where(
+        and(
+          eq(reports.id, data.id),
+          eq(reports.type, 'missing'),
+          eq(reports.verified, false),
+        ),
+      )
   })

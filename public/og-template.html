@@ -3,6 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=1200">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 <style>
   @import url("https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,700&family=Manrope:wght@400;600;700;800&display=swap");
 
@@ -14,173 +15,170 @@
     overflow: hidden;
     font-family: "Manrope", system-ui, sans-serif;
     background-color: #e7f3ec;
-    background:
-      radial-gradient(900px 520px at -5% -8%, rgba(79,184,178,0.36), transparent 55%),
-      radial-gradient(850px 520px at 108% -10%, rgba(47,106,74,0.22), transparent 60%),
-      radial-gradient(600px 320px at 50% 120%, rgba(79,184,178,0.13), transparent 65%),
-      linear-gradient(180deg, #daeee3 0%, #f3faf5 44%, #e7f3ec 100%);
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-    padding: 64px 72px;
     position: relative;
   }
 
-  /* grid texture */
-  body::after {
-    content: "";
-    position: absolute;
-    inset: 0;
-    opacity: 0.1;
-    background-image:
-      linear-gradient(rgba(255,255,255,0.09) 1px, transparent 1px),
-      linear-gradient(90deg, rgba(255,255,255,0.07) 1px, transparent 1px);
-    background-size: 28px 28px;
-    mask-image: radial-gradient(circle at 50% 30%, black, transparent 78%);
-    pointer-events: none;
+  /* mapa real a sangre completa */
+  #map { position: absolute; inset: 0; z-index: 0; background: #aadaff; }
+  .leaflet-container { font-family: inherit; }
+
+  /* velo claro: a la izquierda casi sólido para legibilidad del texto,
+     se desvanece hacia la derecha para que el mapa respire */
+  .scrim {
+    position: absolute; inset: 0; z-index: 1; pointer-events: none;
+    background:
+      linear-gradient(102deg,
+        rgba(231,243,236,0.97) 0%,
+        rgba(231,243,236,0.95) 30%,
+        rgba(231,243,236,0.80) 44%,
+        rgba(231,243,236,0.18) 60%,
+        rgba(231,243,236,0) 70%),
+      radial-gradient(700px 500px at 0% 0%, rgba(79,184,178,0.18), transparent 60%);
+  }
+
+  .content {
+    position: absolute; inset: 0; z-index: 2;
+    display: flex; flex-direction: column; justify-content: center;
+    padding: 64px 72px;
   }
 
   .badge {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    background: rgba(79,184,178,0.14);
-    border: 1.5px solid rgba(79,184,178,0.35);
+    display: inline-flex; align-items: center; gap: 6px;
+    background: rgba(79,184,178,0.16);
+    border: 1.5px solid rgba(79,184,178,0.4);
     color: #246f76;
-    font-size: 13px;
-    font-weight: 700;
-    letter-spacing: 0.06em;
+    font-size: 13px; font-weight: 700; letter-spacing: 0.06em;
     text-transform: uppercase;
-    padding: 5px 14px;
-    border-radius: 100px;
-    width: fit-content;
-    margin-bottom: 28px;
+    padding: 5px 14px; border-radius: 100px;
+    width: fit-content; margin-bottom: 28px;
   }
-
-  .badge-dot {
-    width: 7px;
-    height: 7px;
-    background: #4fb8b2;
-    border-radius: 50%;
-  }
+  .badge-dot { width: 7px; height: 7px; background: #4fb8b2; border-radius: 50%; }
 
   h1 {
     font-family: "Fraunces", serif;
-    font-size: 72px;
-    font-weight: 700;
-    color: #173a40;
-    line-height: 1.05;
-    letter-spacing: -0.02em;
-    margin-bottom: 20px;
+    font-size: 72px; font-weight: 700; color: #173a40;
+    line-height: 1.05; letter-spacing: -0.02em; margin-bottom: 20px;
+    text-shadow: 0 1px 0 rgba(255,255,255,0.6);
+    max-width: 560px; text-wrap: balance;
   }
-
-  h1 span {
-    color: #328f97;
-  }
+  h1 span { color: #328f97; }
 
   p {
-    font-size: 22px;
-    font-weight: 500;
-    color: #416166;
-    line-height: 1.45;
-    max-width: 640px;
+    font-size: 22px; font-weight: 500; color: #3c5a5f;
+    line-height: 1.45; max-width: 560px;
+    text-shadow: 0 1px 0 rgba(255,255,255,0.5);
   }
 
   .domain {
-    position: absolute;
-    bottom: 40px;
-    right: 72px;
-    font-size: 16px;
-    font-weight: 700;
-    color: rgba(65,97,102,0.5);
-    letter-spacing: 0.01em;
+    position: absolute; bottom: 40px; left: 72px; z-index: 2;
+    font-size: 16px; font-weight: 700; color: rgba(65,97,102,0.6);
   }
 
-  /* map pin cluster decorative */
-  .pins {
-    position: absolute;
-    right: 64px;
-    top: 50%;
-    transform: translateY(-50%);
-    width: 300px;
-    height: 300px;
-  }
-
+  /* pin teardrop, igual que la app */
   .pin {
-    position: absolute;
-    border-radius: 50% 50% 50% 0;
+    position: relative; width: 38px; height: 38px;
+    filter: drop-shadow(0 4px 4px rgba(0,0,0,0.28));
+  }
+  .pin > div {
+    width: 38px; height: 38px; border-radius: 50% 50% 50% 0;
     transform: rotate(-45deg);
+    display: grid; place-items: center;
+    border: 2.5px solid #fff;
   }
-
-  .pin-lg {
-    width: 56px; height: 56px;
-    background: #4fb8b2;
-    top: 80px; left: 120px;
-    box-shadow: 0 8px 32px rgba(79,184,178,0.4);
+  .pin svg { transform: rotate(45deg); width: 19px; height: 19px; }
+  .cluster {
+    display: grid; place-items: center; width: 40px; height: 40px;
+    border-radius: 50%; background: #173a40; color: #fff;
+    font-size: 14px; font-weight: 700;
+    border: 3px solid #fff; filter: drop-shadow(0 3px 6px rgba(0,0,0,0.3));
   }
-
-  .pin-lg::after {
-    content: "";
-    position: absolute;
-    width: 22px; height: 22px;
-    background: white;
-    border-radius: 50%;
-    top: 50%; left: 50%;
-    transform: translate(-50%, -50%);
+  .epi {
+    width: 26px; height: 26px; border-radius: 50%;
+    background: #d7263d; box-shadow: 0 0 0 3px #fff, 0 1px 4px rgba(0,0,0,0.4);
   }
-
-  .pin-md {
-    width: 40px; height: 40px;
-    background: #2f6a4a;
-    top: 30px; left: 50px;
-    box-shadow: 0 6px 20px rgba(47,106,74,0.35);
-  }
-
-  .pin-md::after {
-    content: "";
-    position: absolute;
-    width: 16px; height: 16px;
-    background: white;
-    border-radius: 50%;
-    top: 50%; left: 50%;
-    transform: translate(-50%, -50%);
-  }
-
-  .pin-sm {
-    width: 30px; height: 30px;
-    background: #4fb8b2;
-    opacity: 0.6;
-    top: 180px; left: 200px;
-  }
-
-  .ring {
-    position: absolute;
-    border-radius: 50%;
-    border: 2px solid rgba(79,184,178,0.25);
-  }
-
-  .ring-1 { width: 90px; height: 90px; top: 63px; left: 103px; }
-  .ring-2 { width: 130px; height: 130px; top: 43px; left: 83px; }
+  .leaflet-marker-icon.bare { background: none; border: none; }
 </style>
 </head>
 <body>
-  <div class="badge">
-    <span class="badge-dot"></span>
-    Venezuela · En tiempo real
+  <div id="map"></div>
+  <div class="scrim"></div>
+
+  <div class="content">
+    <div class="badge"><span class="badge-dot"></span>Venezuela · En tiempo real</div>
+    <h1>Reportes de emergencia <span>en Venezuela</span></h1>
+    <p>Mapa colaborativo para reportar y consultar<br>incidentes, sismos y alertas.</p>
   </div>
-
-  <h1>Reportes de<br>emergencia <span>en Venezuela</span></h1>
-
-  <p>Mapa colaborativo para reportar y consultar<br>incidentes, sismos y alertas.</p>
-
-  <div class="pins">
-    <div class="ring ring-1"></div>
-    <div class="ring ring-2"></div>
-    <div class="pin pin-lg"></div>
-    <div class="pin pin-md"></div>
-    <div class="pin pin-sm"></div>
-  </div>
-
   <div class="domain">ayudave.com</div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script>
+    // Colores/iconos de tipos de reporte (espejo de src/reports/reports.ts)
+    const TYPES = {
+      atrapado: { color: '#E03131', svg: '<path d="M10 3h4v7h7v4h-7v7h-4v-7H3v-4h7z" fill="#fff"/>' },
+      desaparecido: { color: '#F08C00', svg: '<circle cx="12" cy="7" r="4" fill="#fff"/><path d="M5 21v-1a7 7 0 0 1 14 0v1" fill="#fff"/>' },
+      estructura: { color: '#E8590C', svg: '<path d="M5 21V6h14v15z" fill="none" stroke="#fff" stroke-width="2.2" stroke-linejoin="round"/><path d="M11 6l-2 6 3 1.5-2 7.5" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>' },
+      ayuda: { color: '#2F7BD6', svg: '<circle cx="12" cy="12" r="9" stroke="#fff" stroke-width="2" fill="none"/><path d="M9 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3" stroke="#fff" stroke-width="2.5" stroke-linecap="round" fill="none"/><circle cx="12" cy="17" r="1.5" fill="#fff"/>' },
+      ofrezco: { color: '#2F9E44', svg: '<path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" fill="#fff"/>' },
+      apoyo: { color: '#7048E8', svg: '<path d="M12 3 21 11h-2v9H5v-9H3z" fill="#fff"/>' },
+    };
+
+    const map = L.map('map', {
+      zoomControl: false, attributionControl: false,
+      zoomSnap: 0, fadeAnimation: false, zoomAnimation: false,
+    }).setView([10.4, -69.7], 7.25);
+
+    const tiles = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 });
+    tiles.addTo(map);
+
+    // Heatmap = shakemap MMI (espejo del ShakemapLayer): anillos concéntricos
+    // semitransparentes alrededor del epicentro, paleta verde→amarillo→naranja→rojo.
+    const EPI = [10.4, -68.5];
+    const mmi = [
+      { r: 135000, c: '#a0e6b0' },
+      { r: 100000, c: '#f7f34f' },
+      { r: 68000,  c: '#ffc100' },
+      { r: 42000,  c: '#ff7100' },
+      { r: 22000,  c: '#d7263d' },
+    ];
+    for (const { r, c } of mmi) {
+      L.circle(EPI, { radius: r, stroke: false, fillColor: c, fillOpacity: 0.5 }).addTo(map);
+    }
+
+    const teardrop = (type) => L.divIcon({
+      className: 'bare',
+      html: `<div class="pin"><div style="background:${TYPES[type].color}"><svg viewBox="0 0 24 24">${TYPES[type].svg}</svg></div></div>`,
+      iconSize: [38, 38], iconAnchor: [19, 40],
+    });
+    const cluster = (n) => L.divIcon({
+      className: 'bare', html: `<div class="cluster">${n}</div>`,
+      iconSize: [40, 40], iconAnchor: [20, 20],
+    });
+
+    // Epicentro
+    L.marker(EPI, { icon: L.divIcon({ className: 'bare', html: '<div class="epi"></div>', iconSize: [26,26], iconAnchor: [13,13] }) }).addTo(map);
+
+    // Pins de reportes repartidos por la costa/centro
+    const pins = [
+      [10.50, -66.92, 'atrapado'],   // Caracas
+      [10.18, -67.99, 'estructura'], // Valencia
+      [10.25, -67.60, 'ayuda'],      // Maracay
+      [10.06, -69.32, 'ofrezco'],    // Barquisimeto
+      [11.40, -69.67, 'desaparecido'],// Coro
+      [10.21, -64.63, 'apoyo'],      // Barcelona
+      [9.75, -63.18, 'ayuda'],       // Maturín
+      [10.45, -68.01, 'atrapado'],
+    ];
+    for (const [lat, lng, t] of pins) L.marker([lat, lng], { icon: teardrop(t) }).addTo(map);
+    // Cluster cerca de la zona más golpeada
+    L.marker([10.33, -68.30], { icon: cluster(12) }).addTo(map);
+
+    let tilesDone = false;
+    tiles.on('load', () => { tilesDone = true; });
+    // marca de listo: tiles cargados + un frame extra
+    function done() { requestAnimationFrame(() => requestAnimationFrame(() => { window.__ogReady = true; })); }
+    map.whenReady(() => { if (tilesDone) done(); else tiles.on('load', done); });
+    // respaldo por si 'load' no dispara
+    setTimeout(() => { window.__ogReady = true; }, 4000);
+  </script>
 </body>
 </html>

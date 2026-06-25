@@ -23,13 +23,17 @@ import {
   phoneIntl,
   typeOf,
 } from '../../reports/reports'
-import { confirmReport, flagReport } from '../../reports/reports.functions'
+import {
+  appearReport,
+  confirmReport,
+  flagReport,
+} from '../../reports/reports.functions'
 import type { ReportDetail } from '../../reports/reports.functions'
 
 // Un voto (confirmar/flag) por reporte por dispositivo. ponytail: guard
 // client-side sin auth — suficiente para MVP; subir a rate-limit por IP si hay
-// manipulación. 'c' = confirmado, 'f' = reportado.
-type Vote = { c?: boolean; f?: boolean }
+// manipulación. 'c' = confirmado, 'f' = reportado, 'a' = "ya apareció".
+type Vote = { c?: boolean; f?: boolean; a?: boolean }
 function votes(): Record<string, Vote> {
   try {
     return JSON.parse(localStorage.getItem('ave-voted') ?? '{}')
@@ -201,10 +205,12 @@ export function ReportDetailScreen({
 }) {
   const [confirmed, setConfirmed] = useState(false)
   const [flagged, setFlagged] = useState(false)
+  const [appeared, setAppeared] = useState(false)
   const [bump, setBump] = useState(0) // confirmaciones extra optimistas
   const [shareOpen, setShareOpen] = useState(false)
   const [confirmOpen, setConfirmOpen] = useState(false)
   const [flagOpen, setFlagOpen] = useState(false)
+  const [appearOpen, setAppearOpen] = useState(false)
 
   // Al cargar/cambiar de reporte, lee el estado de voto persistido.
   useEffect(() => {
@@ -212,6 +218,7 @@ export function ReportDetailScreen({
     const v = votes()[report.id] as Vote | undefined
     setConfirmed(!!v?.c)
     setFlagged(!!v?.f)
+    setAppeared(!!v?.a)
     setBump(0)
   }, [report?.id])
 
@@ -230,6 +237,13 @@ export function ReportDetailScreen({
     flagReport({
       data: { id: report.id, reason: reason.trim() || undefined },
     }).catch(() => {})
+  }
+
+  const doAppear = () => {
+    if (!report || appeared) return
+    setAppeared(true)
+    addVote(report.id, 'a')
+    appearReport({ data: { id: report.id } }).catch(() => {})
   }
 
   const label = report ? typeOf(report.type).label : 'Reporte'
@@ -267,9 +281,11 @@ export function ReportDetailScreen({
           user={user}
           confirmed={confirmed}
           flagged={flagged}
+          appeared={appeared}
           confirms={report.confirms + bump}
           onConfirm={() => setConfirmOpen(true)}
           onFlag={() => setFlagOpen(true)}
+          onAppear={() => setAppearOpen(true)}
           onShare={() => setShareOpen(true)}
         />
       )}
@@ -296,6 +312,15 @@ export function ReportDetailScreen({
           }}
         />
       )}
+      {appearOpen && (
+        <AppearDialog
+          onCancel={() => setAppearOpen(false)}
+          onConfirm={() => {
+            doAppear()
+            setAppearOpen(false)
+          }}
+        />
+      )}
     </div>
   )
 }
@@ -305,18 +330,22 @@ function Body({
   user,
   confirmed,
   flagged,
+  appeared,
   confirms,
   onConfirm,
   onFlag,
+  onAppear,
   onShare,
 }: {
   report: ReportDetail
   user: [number, number] | null
   confirmed: boolean
   flagged: boolean
+  appeared: boolean
   confirms: number
   onConfirm: () => void
   onFlag: () => void
+  onAppear: () => void
   onShare: () => void
 }) {
   const { type, meta } = report
@@ -329,7 +358,9 @@ function Body({
   const headline =
     type === 'missing' && meta.missingName
       ? String(meta.missingName)
-      : t.label
+      : type === 'lostpet' && meta.petName
+        ? String(meta.petName)
+        : t.label
   const intl = phoneIntl(report.contact)
   const showContact = canContact(type, report.contact)
 
@@ -447,6 +478,26 @@ function Body({
           </div>
         )}
 
+        {/* "Ya apareció" — solo desaparecidos de la comunidad. A los 3 votos el
+            aviso se oculta del mapa (el umbral vive en appearReport). */}
+        {type === 'missing' && !report.verified && (
+          <div className="mt-4 px-5">
+            <div className="flex items-center justify-between rounded-2xl bg-[#f0fdf4] px-4 py-3">
+              <span className="text-[14px] text-[#14532d]">
+                ¿Esta persona ya apareció?
+              </span>
+              <button
+                type="button"
+                onClick={onAppear}
+                disabled={appeared}
+                className="rounded-full bg-[#15803d] px-4 py-2 text-[13px] font-bold text-white disabled:bg-[#a7d8b5]"
+              >
+                {appeared ? '✓ Marcado' : 'Ya apareció'}
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Reportar abuso */}
         <div className="mt-4 mb-2 px-5">
           <button
@@ -500,7 +551,7 @@ function Body({
           className="flex h-[52px] w-full items-center justify-center gap-2 rounded-2xl border border-[#d4dbdc] text-[16px] font-bold text-[#173a40]"
         >
           <Navigation className="size-5" />
-          {type === 'danger' || type === 'missing'
+          {type === 'danger' || type === 'missing' || type === 'lostpet'
             ? 'Ver ubicación'
             : 'Cómo llegar'}
         </a>
@@ -525,7 +576,10 @@ function ShareSheet({
     report.type === 'missing' &&
     typeof report.meta.missingName === 'string'
       ? `Ayúdanos a encontrar a ${report.meta.missingName}`
-      : typeOf(report.type).label
+      : report.type === 'lostpet' &&
+          typeof report.meta.petName === 'string'
+        ? `Ayúdanos a encontrar a ${report.meta.petName}`
+        : typeOf(report.type).label
   const u = encodeURIComponent(url)
   const t = encodeURIComponent(text)
 
@@ -666,6 +720,51 @@ function ConfirmDialog({
             className="h-[48px] flex-1 rounded-2xl bg-[#0e9c8f] text-[15px] font-bold text-white"
           >
             Confirmar
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// "Ya apareció": ocultar el aviso es sensible, así que pedimos intención explícita.
+function AppearDialog({
+  onCancel,
+  onConfirm,
+}: {
+  onCancel: () => void
+  onConfirm: () => void
+}) {
+  return (
+    <div
+      className="fixed inset-0 z-[960] flex items-end justify-center bg-black/40 sm:items-center sm:p-4"
+      onClick={onCancel}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        className="w-full rounded-t-2xl bg-white p-5 pb-[calc(20px+env(safe-area-inset-bottom))] sm:max-w-sm sm:rounded-2xl sm:pb-5"
+      >
+        <h2 className="text-[18px] font-bold text-[#1a1c1e]">
+          ¿Esta persona ya apareció?
+        </h2>
+        <p className="mt-2 text-[14px] leading-relaxed text-[#6b7280]">
+          Márcalo solo si sabes que la encontraron. Cuando varias personas lo
+          confirmen, el aviso se ocultará del mapa.
+        </p>
+        <div className="mt-5 flex gap-3">
+          <button
+            type="button"
+            onClick={onCancel}
+            className="h-[48px] flex-1 rounded-2xl border border-[#e5e7eb] text-[15px] font-bold text-[#374151]"
+          >
+            Cancelar
+          </button>
+          <button
+            type="button"
+            onClick={onConfirm}
+            className="h-[48px] flex-1 rounded-2xl bg-[#15803d] text-[15px] font-bold text-white"
+          >
+            Ya apareció
           </button>
         </div>
       </div>

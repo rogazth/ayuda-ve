@@ -20,7 +20,7 @@ import {
   Waves,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { fmtAge, typeOf } from '../../reports/reports'
+import { fmtAge, newFreshPins, typeOf } from '../../reports/reports'
 import {
   fetchReport,
   fetchReportsInBounds,
@@ -112,12 +112,47 @@ function ShakemapLayer({ shakemap }: { shakemap: MmiContours }) {
   return null
 }
 
+// Beep corto vía Web Audio: sin assets ni fetch. Contexto nuevo por beep, se
+// cierra al terminar (los navegadores limitan ~6 contextos vivos).
+// ponytail: el navegador exige un gesto previo del usuario para sonar; en esta
+// app el usuario ya toca el mapa, así que para cuando llega un poll suele estar
+// desbloqueado. Si no suena en frío, gatear tras el primer click.
+function beep() {
+  try {
+    const Ctx =
+      window.AudioContext ||
+      (window as unknown as { webkitAudioContext: typeof AudioContext })
+        .webkitAudioContext
+    const ctx = new Ctx()
+    const osc = ctx.createOscillator()
+    const gain = ctx.createGain()
+    osc.connect(gain)
+    gain.connect(ctx.destination)
+    osc.type = 'sine'
+    osc.frequency.value = 880
+    const t = ctx.currentTime
+    gain.gain.setValueAtTime(0.0001, t)
+    gain.gain.exponentialRampToValueAtTime(0.25, t + 0.02)
+    gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.4)
+    osc.start(t)
+    osc.stop(t + 0.42)
+    osc.onended = () => ctx.close()
+  } catch {
+    /* sin Web Audio o bloqueado: el toast sigue avisando */
+  }
+}
+
+// Reportes nuevos en viewport: refresco y ventana de frescura. La ventana > el
+// intervalo para no perder uno que llegó justo entre polls.
+const POLL_MS = 30_000
+const FRESH_NEW_MS = 2 * 60_000
+
 const DEFAULT_ZOOM = 15
 const MIN_ZOOM = 6 // ponytail: bbox ilimitado es fine — la tabla es pequeña y el índice cubre todo
 
 const VE_MAX_BOUNDS: L.LatLngBoundsExpression = [
-  [VE_BOUNDS.minLat - 0.5, VE_BOUNDS.minLng - 0.5],
-  [VE_BOUNDS.maxLat + 0.5, VE_BOUNDS.maxLng + 0.5],
+  [VE_BOUNDS.minLat - 6, VE_BOUNDS.minLng - 6],
+  [VE_BOUNDS.maxLat + 6, VE_BOUNDS.maxLng + 6],
 ]
 
 // Arranque directo en la zona del terremoto. Cacheamos el último epicentro en
@@ -337,8 +372,35 @@ export default function MapScreen() {
     }
   }, [])
 
+  // Detección de reportes nuevos en el viewport para el beep. `seen` acumula los
+  // ids ya mostrados; `seeded` evita sonar en la primera carga (acabas de llegar,
+  // ya ves los pines).
+  const seenRef = useRef<Set<string>>(new Set())
+  const seededRef = useRef(false)
   const onData = useCallback((d: Data) => {
     setPins(d.pins)
+    const seen = seenRef.current
+    if (!seededRef.current) {
+      for (const p of d.pins) seen.add(p.id)
+      seededRef.current = true
+      return
+    }
+    const fresh = newFreshPins(d.pins, seen, Date.now(), FRESH_NEW_MS)
+    if (fresh.length) {
+      beep()
+      toast(
+        fresh.length === 1
+          ? `Nuevo reporte: ${fresh[0].title}`
+          : `${fresh.length} reportes nuevos en el mapa`,
+      )
+    }
+  }, [])
+
+  // Poll: refresca los pines del viewport cada POLL_MS reusando refreshKey, que
+  // el MapController ya escucha. onData detecta los nuevos y suena.
+  useEffect(() => {
+    const t = setInterval(() => setRefreshKey((k) => k + 1), POLL_MS)
+    return () => clearInterval(t)
   }, [])
 
   const handleLocated = useCallback((pos: [number, number]) => {
@@ -384,9 +446,9 @@ export default function MapScreen() {
         className="absolute inset-0 h-full w-full z-0 bg-[#ebe8e0]"
         center={seed}
         zoom={QUAKE_ZOOM}
-        minZoom={6}
+        minZoom={5}
         maxBounds={VE_MAX_BOUNDS}
-        maxBoundsViscosity={1}
+        maxBoundsViscosity={0.5}
         zoomControl={false}
         attributionControl={false}
         preferCanvas

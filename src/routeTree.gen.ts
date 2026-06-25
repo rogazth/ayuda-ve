@@ -10,11 +10,23 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as MediaSplatRouteImport } from './routes/media.$'
+import { Route as ApiScrapeRouteImport } from './routes/api.scrape'
 import { Route as ApiReportsIdPhotosRouteImport } from './routes/api.reports.$id.photos'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const MediaSplatRoute = MediaSplatRouteImport.update({
+  id: '/media/$',
+  path: '/media/$',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiScrapeRoute = ApiScrapeRouteImport.update({
+  id: '/api/scrape',
+  path: '/api/scrape',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiReportsIdPhotosRoute = ApiReportsIdPhotosRouteImport.update({
@@ -25,27 +37,35 @@ const ApiReportsIdPhotosRoute = ApiReportsIdPhotosRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/api/scrape': typeof ApiScrapeRoute
+  '/media/$': typeof MediaSplatRoute
   '/api/reports/$id/photos': typeof ApiReportsIdPhotosRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/api/scrape': typeof ApiScrapeRoute
+  '/media/$': typeof MediaSplatRoute
   '/api/reports/$id/photos': typeof ApiReportsIdPhotosRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/api/scrape': typeof ApiScrapeRoute
+  '/media/$': typeof MediaSplatRoute
   '/api/reports/$id/photos': typeof ApiReportsIdPhotosRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/api/reports/$id/photos'
+  fullPaths: '/' | '/api/scrape' | '/media/$' | '/api/reports/$id/photos'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/api/reports/$id/photos'
-  id: '__root__' | '/' | '/api/reports/$id/photos'
+  to: '/' | '/api/scrape' | '/media/$' | '/api/reports/$id/photos'
+  id: '__root__' | '/' | '/api/scrape' | '/media/$' | '/api/reports/$id/photos'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  ApiScrapeRoute: typeof ApiScrapeRoute
+  MediaSplatRoute: typeof MediaSplatRoute
   ApiReportsIdPhotosRoute: typeof ApiReportsIdPhotosRoute
 }
 
@@ -56,6 +76,20 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/media/$': {
+      id: '/media/$'
+      path: '/media/$'
+      fullPath: '/media/$'
+      preLoaderRoute: typeof MediaSplatRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/scrape': {
+      id: '/api/scrape'
+      path: '/api/scrape'
+      fullPath: '/api/scrape'
+      preLoaderRoute: typeof ApiScrapeRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/reports/$id/photos': {
@@ -70,6 +104,8 @@ declare module '@tanstack/react-router' {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  ApiScrapeRoute: ApiScrapeRoute,
+  MediaSplatRoute: MediaSplatRoute,
   ApiReportsIdPhotosRoute: ApiReportsIdPhotosRoute,
 }
 export const routeTree = rootRouteImport

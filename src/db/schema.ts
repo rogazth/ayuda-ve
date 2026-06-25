@@ -5,6 +5,7 @@ import {
   real,
   sqliteTable,
   text,
+  uniqueIndex,
 } from 'drizzle-orm/sqlite-core'
 
 // created_at + updated_at compartidos. Función (no constante) para que cada tabla
@@ -32,15 +33,25 @@ export const reports = sqliteTable(
     lng: real('lng').notNull(),
     confirms: integer('confirms').notNull().default(0),
     flags: integer('flags').notNull().default(0),
+    appeared: integer('appeared').notNull().default(0), // votos "ya apareció" (solo missing)
     status: text('status').notNull().default('visible'), // visible | hidden
     contact: text('contact'),
     url: text('url'), // fuente externa verificable (tweet, post, etc.)
     verified: integer('verified', { mode: 'boolean' }).notNull().default(false),
     meta: text('meta'), // JSON blob con campos específicos por tipo
     creatorIp: text('creator_ip'), // para bloquear self-confirm
+    // Origen externo (scrapers). null = creado por un usuario. El par
+    // (source, id) es único → cada corrida del cron hace upsert, no duplica.
+    externalSource: text('external_source'), // ej. 'venezuelatebusca'
+    externalId: text('external_id'), // id de la persona en la fuente
     ...timestamps(),
   },
-  (t) => [index('reports_lat_lng').on(t.lat, t.lng)], // bbox del viewport
+  (t) => [
+    index('reports_lat_lng').on(t.lat, t.lng), // bbox del viewport
+    // SQLite trata NULLs como distintos, así que las filas de usuario
+    // (ambos null) nunca colisionan; solo las scrapeadas comparten clave.
+    uniqueIndex('reports_external').on(t.externalSource, t.externalId),
+  ],
 )
 
 export const comments = sqliteTable('comments', {
@@ -112,6 +123,19 @@ export const media = sqliteTable('media', {
   width: integer('width').notNull(),
   height: integer('height').notNull(),
   position: integer('position').notNull(),
+  createdAt: integer('created_at', { mode: 'timestamp' })
+    .notNull()
+    .default(sql`(unixepoch())`),
+})
+
+// Caché de geocoding (texto libre → lat/lng vía Nominatim). Una consulta por
+// texto único, para siempre: evita el rate-limit (1 req/s) y re-consultas. Las
+// filas con lat null son "misses" cacheados (no re-intentamos lo irresoluble).
+export const geocache = sqliteTable('geocache', {
+  query: text('query').primaryKey(), // texto normalizado (lower + trim)
+  lat: real('lat'),
+  lng: real('lng'),
+  precision: text('precision'), // addresstype de Nominatim, o null
   createdAt: integer('created_at', { mode: 'timestamp' })
     .notNull()
     .default(sql`(unixepoch())`),

@@ -14,6 +14,7 @@ type ReportType =
   | 'need'
   | 'offer'
   | 'support'
+  | 'lostpet'
 type Step = 'type' | 'location' | 'details' | 'contact'
 
 type PhotoDraft = { preview: string; blob: Blob; width: number; height: number }
@@ -33,6 +34,8 @@ type Draft = {
   capacity?: string
   available?: string[]
   schedule?: string
+  petName?: string
+  species?: string
   contact?: string
   description?: string
   photos?: PhotoDraft[]
@@ -43,10 +46,11 @@ const VE_QUAKE: [number, number] = [10.4, -68.5]
 const TYPE_CARDS: { key: ReportType; emoji: string; label: string }[] = [
   { key: 'trapped', emoji: '🆘', label: 'Persona atrapada' },
   { key: 'missing', emoji: '👤', label: 'Persona desaparecida' },
-  { key: 'danger', emoji: '⚠️', label: 'Zona de peligro' },
+  { key: 'danger', emoji: '🏚️', label: 'Estructura dañada' },
   { key: 'need', emoji: '🙏', label: 'Necesito ayuda' },
   { key: 'offer', emoji: '❤️', label: 'Ofrezco ayuda' },
   { key: 'support', emoji: '🏠', label: 'Punto de apoyo' },
+  { key: 'lostpet', emoji: '🐾', label: 'Mascota desaparecida' },
 ]
 
 const HELP_ITEMS = ['Agua', 'Comida', 'Medicamentos', 'Refugio', 'Transporte']
@@ -67,6 +71,7 @@ const DANGER_TYPES = [
   'Fuga de gas',
   'Estructura inestable',
 ]
+const SPECIES = ['Perro', 'Gato', 'Otro']
 
 // --- small reusable pieces ---
 
@@ -348,7 +353,6 @@ function PhotosInput({
     onChange(next)
   }
 
-
   const startDrag = (e: React.PointerEvent<HTMLDivElement>, i: number) => {
     e.preventDefault()
     e.currentTarget.setPointerCapture(e.pointerId)
@@ -579,6 +583,8 @@ export function ReportWizard({
       if (draft.capacity) meta.capacity = draft.capacity
       if (draft.available?.length) meta.available = draft.available
       if (draft.schedule) meta.schedule = draft.schedule
+      if (draft.petName) meta.petName = draft.petName
+      if (draft.species) meta.species = draft.species
 
       const row = await createReport({
         data: {
@@ -608,7 +614,8 @@ export function ReportWizard({
 
       onClose()
       if (newId) onSubmitDone(newId)
-    } catch {
+    } catch (e) {
+      console.error('Error al enviar reporte:', e)
       setError('Error al enviar. Intenta de nuevo.')
       setSubmitting(false)
     }
@@ -830,6 +837,30 @@ export function ReportWizard({
                 value={draft.schedule ?? ''}
                 onChange={(v) => set('schedule', v)}
               />
+            </Field>
+          </div>
+        )
+      case 'lostpet':
+        return (
+          <div className="px-5 pb-4">
+            <Field label="Nombre de la mascota (opcional)">
+              <TextInput
+                placeholder="Ej: Toby"
+                value={draft.petName ?? ''}
+                onChange={(v) => set('petName', v)}
+              />
+            </Field>
+            <Field label="Especie">
+              <div className="flex flex-wrap gap-2">
+                {SPECIES.map((s) => (
+                  <Chip
+                    key={s}
+                    label={s}
+                    selected={draft.species === s}
+                    onToggle={() => set('species', s)}
+                  />
+                ))}
+              </div>
             </Field>
           </div>
         )
