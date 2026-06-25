@@ -14,6 +14,8 @@ if (typeof window !== 'undefined') {
     integrations: [Sentry.browserTracingIntegration()],
     tracesSampleRate: 0.2,
     environment: import.meta.env.MODE,
+    // ponytail: ruido de WebViews/navegadores in-app (autofill, keyboard logging), no es código nuestro
+    ignoreErrors: [/xbrowser is not defined/, /swbrowser is not defined/, /enableDidUserTypeOnKeyboardLogging/],
   })
 }
 
