@@ -15,6 +15,10 @@ type ReportType =
   | 'offer'
   | 'support'
   | 'lostpet'
+  | 'wifi'
+  | 'road'
+  | 'security'
+  | 'flood'
 type Step = 'type' | 'location' | 'details' | 'contact'
 
 type PhotoDraft = { preview: string; blob: Blob; width: number; height: number }
@@ -36,6 +40,12 @@ type Draft = {
   schedule?: string
   petName?: string
   species?: string
+  wifiPassword?: string
+  roadCause?: string
+  passable?: string
+  securityType?: string[]
+  stillActive?: string
+  floodLevel?: string
   contact?: string
   description?: string
   photos?: PhotoDraft[]
@@ -51,6 +61,10 @@ const TYPE_CARDS: { key: ReportType; emoji: string; label: string }[] = [
   { key: 'offer', emoji: '❤️', label: 'Ofrezco ayuda' },
   { key: 'support', emoji: '🏠', label: 'Punto de apoyo' },
   { key: 'lostpet', emoji: '🐾', label: 'Mascota desaparecida' },
+  { key: 'wifi', emoji: '📶', label: 'Señal / Internet' },
+  { key: 'road', emoji: '🚧', label: 'Vía bloqueada' },
+  { key: 'security', emoji: '🚨', label: 'Alerta de seguridad' },
+  { key: 'flood', emoji: '🌊', label: 'Zona inundada' },
 ]
 
 const HELP_ITEMS = ['Agua', 'Comida', 'Medicamentos', 'Refugio', 'Transporte']
@@ -72,6 +86,9 @@ const DANGER_TYPES = [
   'Estructura inestable',
 ]
 const SPECIES = ['Perro', 'Gato', 'Otro']
+const ROAD_CAUSES = ['Derrumbe', 'Inundación', 'Árbol caído', 'Accidente', 'Otro']
+const SECURITY_TYPES = ['Saqueo', 'Vandalismo', 'Zona de riesgo']
+const FLOOD_LEVELS = ['Baja', 'Media', 'Alta']
 
 // --- small reusable pieces ---
 
@@ -543,7 +560,7 @@ export function ReportWizard({
 
   const set = <K extends keyof Draft>(k: K, v: Draft[K]) =>
     setDraft((d) => ({ ...d, [k]: v }))
-  const toggleItem = (list: 'items' | 'available', item: string) =>
+  const toggleItem = (list: 'items' | 'available' | 'securityType', item: string) =>
     setDraft((d) => {
       const cur = d[list] ?? []
       return {
@@ -585,6 +602,12 @@ export function ReportWizard({
       if (draft.schedule) meta.schedule = draft.schedule
       if (draft.petName) meta.petName = draft.petName
       if (draft.species) meta.species = draft.species
+      if (draft.wifiPassword) meta.wifiPassword = draft.wifiPassword
+      if (draft.roadCause) meta.roadCause = draft.roadCause
+      if (draft.passable) meta.passable = draft.passable
+      if (draft.securityType?.length) meta.securityType = draft.securityType
+      if (draft.stillActive) meta.stillActive = draft.stillActive
+      if (draft.floodLevel) meta.floodLevel = draft.floodLevel
 
       const row = await createReport({
         data: {
@@ -836,6 +859,109 @@ export function ReportWizard({
                 placeholder="Ej: Lunes a viernes 8am–6pm"
                 value={draft.schedule ?? ''}
                 onChange={(v) => set('schedule', v)}
+              />
+            </Field>
+          </div>
+        )
+      case 'wifi':
+        return (
+          <div className="px-5 pb-4">
+            <Field label="¿Qué hay disponible?">
+              <div className="flex flex-wrap gap-2">
+                {['WiFi gratis', 'Señal celular', 'Carga de teléfono'].map((item) => (
+                  <Chip
+                    key={item}
+                    label={item}
+                    selected={(draft.available ?? []).includes(item)}
+                    onToggle={() => toggleItem('available', item)}
+                  />
+                ))}
+              </div>
+            </Field>
+            <Field label="Contraseña WiFi (opcional)">
+              <TextInput
+                placeholder="Dejar vacío si es abierta"
+                value={draft.wifiPassword ?? ''}
+                onChange={(v) => set('wifiPassword', v)}
+              />
+            </Field>
+            <Field label="Horario (opcional)">
+              <TextInput
+                placeholder="Ej: 8am–10pm todos los días"
+                value={draft.schedule ?? ''}
+                onChange={(v) => set('schedule', v)}
+              />
+            </Field>
+          </div>
+        )
+      case 'road':
+        return (
+          <div className="px-5 pb-4">
+            <Field label="Causa del bloqueo">
+              <div className="flex flex-wrap gap-2">
+                {ROAD_CAUSES.map((c) => (
+                  <Chip
+                    key={c}
+                    label={c}
+                    selected={draft.roadCause === c}
+                    onToggle={() => set('roadCause', c)}
+                  />
+                ))}
+              </div>
+            </Field>
+            <Field label="¿Se puede pasar?">
+              <ToggleGroup
+                options={['Sí', 'No', 'Solo a pie']}
+                value={draft.passable}
+                onChange={(v) => set('passable', v)}
+              />
+            </Field>
+          </div>
+        )
+      case 'security':
+        return (
+          <div className="px-5 pb-4">
+            <Field label="Tipo de alerta">
+              <div className="flex flex-wrap gap-2">
+                {SECURITY_TYPES.map((t) => (
+                  <Chip
+                    key={t}
+                    label={t}
+                    selected={(draft.securityType ?? []).includes(t)}
+                    onToggle={() => toggleItem('securityType', t)}
+                  />
+                ))}
+              </div>
+            </Field>
+            <Field label="Situación actual">
+              <ToggleGroup
+                options={['En curso', 'Terminó', 'Sin información']}
+                value={draft.stillActive}
+                onChange={(v) => set('stillActive', v)}
+              />
+            </Field>
+          </div>
+        )
+      case 'flood':
+        return (
+          <div className="px-5 pb-4">
+            <Field label="Nivel de inundación">
+              <div className="flex flex-wrap gap-2">
+                {FLOOD_LEVELS.map((l) => (
+                  <Chip
+                    key={l}
+                    label={l}
+                    selected={draft.floodLevel === l}
+                    onToggle={() => set('floodLevel', l)}
+                  />
+                ))}
+              </div>
+            </Field>
+            <Field label="¿Se puede pasar?">
+              <ToggleGroup
+                options={['Sí', 'No', 'Solo a pie']}
+                value={draft.passable}
+                onChange={(v) => set('passable', v)}
               />
             </Field>
           </div>

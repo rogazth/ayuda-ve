@@ -1,6 +1,6 @@
 import { createServerFn } from '@tanstack/react-start'
 import { getRequestHeader, getRequestIP } from '@tanstack/react-start/server'
-import { and, asc, desc, eq, gte, lte, sql } from 'drizzle-orm'
+import { and, asc, desc, eq, gte, lte, ne, or, sql } from 'drizzle-orm'
 import { getDb } from '../db'
 import { comments, media, reportConfirms, reports } from '../db/schema'
 import { TYPES } from './reports'
@@ -17,6 +17,8 @@ function clientUa(): string {
 // ponytail: dato viejo en emergencia = peligroso. Filtramos a 48h (mvp.md).
 // TODO(albergue): los albergues sembrados deberían exentarse de este filtro.
 const FRESH_MS = 48 * 60 * 60 * 1000
+// Alertas de seguridad expiran en 12h — son eventos puntuales, no permanentes.
+const SECURITY_TTL_MS = 12 * 60 * 60 * 1000
 
 export type Bounds = { s: number; n: number; w: number; e: number }
 
@@ -33,6 +35,7 @@ export const fetchReportsInBounds = createServerFn({ method: 'GET' })
   .handler(async ({ data }) => {
     const db = getDb()
     const cutoff = new Date(Date.now() - FRESH_MS)
+    const securityCutoff = new Date(Date.now() - SECURITY_TTL_MS)
     const rows = await db
       .select({
         id: reports.id,
@@ -52,6 +55,8 @@ export const fetchReportsInBounds = createServerFn({ method: 'GET' })
           gte(reports.lng, data.w),
           lte(reports.lng, data.e),
           gte(reports.createdAt, cutoff),
+          // alertas de seguridad expiran en 12h
+          or(ne(reports.type, 'security'), gte(reports.createdAt, securityCutoff)),
         ),
       )
       .orderBy(desc(reports.createdAt))

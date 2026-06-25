@@ -551,7 +551,7 @@ function Body({
           className="flex h-[52px] w-full items-center justify-center gap-2 rounded-2xl border border-[#d4dbdc] text-[16px] font-bold text-[#173a40]"
         >
           <Navigation className="size-5" />
-          {type === 'danger' || type === 'missing' || type === 'lostpet'
+          {['danger', 'road', 'security', 'flood', 'missing', 'lostpet'].includes(type)
             ? 'Ver ubicación'
             : 'Cómo llegar'}
         </a>

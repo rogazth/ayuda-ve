@@ -30,7 +30,7 @@ export const TYPES: Record<string, TypeMeta> = {
     svg: '<path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" fill="#fff"/>',
   },
   support: {
-    label: 'Punto de apoyo',
+    label: 'Centro de acopio',
     color: '#7048E8',
     svg: '<path d="M12 3 21 11h-2v9H5v-9H3z" fill="#fff"/>',
   },
@@ -38,6 +38,26 @@ export const TYPES: Record<string, TypeMeta> = {
     label: 'Mascota desaparecida',
     color: '#0CA678',
     svg: '<path d="M5.5 11a1.7 1.7 0 1 0 0-3.4 1.7 1.7 0 0 0 0 3.4zm4-3a1.7 1.7 0 1 0 0-3.4 1.7 1.7 0 0 0 0 3.4zm5 0a1.7 1.7 0 1 0 0-3.4 1.7 1.7 0 0 0 0 3.4zm4 3a1.7 1.7 0 1 0 0-3.4 1.7 1.7 0 0 0 0 3.4zM12 11.5c-2.6 0-5 2.8-5 5 0 1.6 1.2 2.5 2.7 2.5 1 0 1.6-.5 2.3-.5s1.3.5 2.3.5c1.5 0 2.7-.9 2.7-2.5 0-2.2-2.4-5-5-5z" fill="#fff"/>',
+  },
+  wifi: {
+    label: 'Señal / Internet',
+    color: '#1971C2',
+    svg: '<path d="M12 21l1.5-1.5A9 9 0 0 0 3 10.5L1.5 12A11 11 0 0 1 12 3a11 11 0 0 1 10.5 9L21 10.5a9 9 0 0 0-9.5 9L12 21zm0 0l1.5-1.5a5 5 0 0 0-3 0L12 21zm0-4a2 2 0 1 1 0 4 2 2 0 0 1 0-4zm0-4a6 6 0 0 1 4.5 2L15 16.5A4 4 0 0 0 12 15a4 4 0 0 0-3 1.5L7.5 15A6 6 0 0 1 12 13z" fill="#fff"/>',
+  },
+  road: {
+    label: 'Vía bloqueada',
+    color: '#B45309',
+    svg: '<circle cx="12" cy="12" r="9" fill="none" stroke="#fff" stroke-width="2"/><path d="M7 12h10" stroke="#fff" stroke-width="2.5" stroke-linecap="round"/>',
+  },
+  security: {
+    label: 'Alerta de seguridad',
+    color: '#9F1239',
+    svg: '<path d="M12 2L4 6v6c0 4.4 3.5 8.5 8 9.5 4.5-1 8-5.1 8-9.5V6l-8-4z" fill="none" stroke="#fff" stroke-width="2" stroke-linejoin="round"/><path d="M12 8v4.5" stroke="#fff" stroke-width="2.2" stroke-linecap="round"/><circle cx="12" cy="15.5" r="1.3" fill="#fff"/>',
+  },
+  flood: {
+    label: 'Zona inundada',
+    color: '#1D4ED8',
+    svg: '<path d="M3 10c1.5-2 3-2 4.5 0s3 2 4.5 0 3-2 4.5 0 3 2 4.5 0M3 15c1.5-2 3-2 4.5 0s3 2 4.5 0 3-2 4.5 0 3 2 4.5 0" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round"/><path d="M7 6l2-3 2 3M13 6l2-3 2 3" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>',
   },
 }
 
@@ -428,6 +448,23 @@ const META_SPECS: Record<string, [key: string, label: string][]> = {
     ['petName', 'Nombre'],
     ['species', 'Especie'],
   ],
+  wifi: [
+    ['available', 'Disponible'],
+    ['wifiPassword', 'Contraseña WiFi'],
+    ['schedule', 'Horario'],
+  ],
+  road: [
+    ['roadCause', 'Causa'],
+    ['passable', 'Transitable'],
+  ],
+  security: [
+    ['securityType', 'Tipo'],
+    ['stillActive', 'Situación actual'],
+  ],
+  flood: [
+    ['floodLevel', 'Nivel'],
+    ['passable', 'Transitable'],
+  ],
 }
 
 export type MetaField = { label: string; text?: string; chips?: string[] }
@@ -454,12 +491,13 @@ export function phoneIntl(contact: string | null | undefined): string | null {
   return d.startsWith('58') ? d : `58${d}`
 }
 
-// 'danger' no se contacta ni se invita a ir: es una zona a evitar.
+// Zonas a evitar o alertas sin persona responsable contactable.
+const NO_CONTACT_TYPES = new Set(['danger', 'road', 'security', 'flood'])
 export function canContact(
   type: string,
   contact: string | null | undefined,
 ): boolean {
-  return type !== 'danger' && phoneIntl(contact) != null
+  return !NO_CONTACT_TYPES.has(type) && phoneIntl(contact) != null
 }
 
 export function mapsDir(lat: number, lng: number): string {
