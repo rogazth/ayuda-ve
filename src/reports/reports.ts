@@ -47,25 +47,26 @@ export type ContactEntry = { name: string; phone: string; note?: string; source:
 
 const EE =
   'https://www.elespectador.com/mundo/venezuela/sismo-en-venezuela-hoy-lineas-de-atencion-y-emergencia-nacional-en-zonas-afectadas/'
+const PJ = 'https://x.com/Pr1meroJusticia/status/2069958385726902674'
 
 export const EMERGENCY: ContactEntry[] = [
   {
-    name: 'Emergencias (VEN911)',
-    phone: '171',
+    name: 'Emergencias Nacionales',
+    phone: '911',
     note: 'Policía · Bomberos · Médica',
-    source: { label: 'VEN911', url: 'https://www.ven911.gob.ve/' },
+    source: { label: 'Primero Justicia, jun. 2026', url: PJ },
   },
   {
     name: 'Bomberos',
     phone: '167',
     note: 'Código corto nacional',
-    source: { label: 'El Espectador, jun. 2026', url: EE },
+    source: { label: 'Primero Justicia, jun. 2026', url: PJ },
   },
   {
     name: 'Protección Civil',
-    phone: '0800-724-8451',
-    note: 'Desastres · también: 166',
-    source: { label: 'pcivil.gob.ve', url: 'https://www.pcivil.gob.ve/' },
+    phone: '166',
+    note: 'Desastres · línea larga: 0800-724-8451',
+    source: { label: 'Primero Justicia, jun. 2026', url: PJ },
   },
   {
     name: 'CORPOELEC',
