@@ -63,7 +63,11 @@ export const fetchReportsInBounds = createServerFn({ method: 'GET' })
         ),
       )
       .orderBy(desc(reports.createdAt))
-      .limit(200)
+      // El mapa clusteriza (MarkerClusterGroup), así que miles de pines no lo
+      // matan; el bbox del viewport ya acota. 200 dejaba fuera casi todo el
+      // backlog. ponytail: cap cliente — si zoomed-out con ~43k se pone lento,
+      // el upgrade es clustering server-side por tile, no subir más este número.
+      .limit(5000)
 
     return rows.map((r) => ({ ...r, createdAt: r.createdAt.getTime() }))
   })
