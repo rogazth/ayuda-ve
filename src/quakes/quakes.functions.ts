@@ -1,27 +1,27 @@
 import { createServerFn } from '@tanstack/react-start'
-import { VE_BOUNDS, parseForecast } from './quakes'
-import type { Forecast, OafForecast } from './quakes'
+import {
+  VE_BOUNDS,
+  inVenezuela,
+  mergeQuakes,
+  parseForecast,
+  parseFunvisis,
+} from './quakes'
+import type { Forecast, FunvisisGeo, OafForecast, Quake } from './quakes'
 
-// Sismos desde USGS (fuente pública, sin API key, GeoJSON). Datos verídicos:
-// graficamos lo registrado, no predecimos. Bbox de Venezuela = VE_BOUNDS
-// (fuente única en lib/quakes). ponytail: ampliar si cubrimos el Caribe.
+// Sismos de DOS fuentes que se correlacionan: USGS (catálogo global, GeoJSON,
+// sin key) trae los eventos grandes con página oficial, ShakeMap y pronóstico;
+// FUNVISIS (red local) trae las réplicas chicas (M2–4) que USGS no registra en
+// Venezuela. mergeQuakes() las une y deduplica. Datos verídicos: graficamos lo
+// registrado, no predecimos. Bbox = VE_BOUNDS. ponytail: ampliar si cubrimos el Caribe.
 const DAYS = 7
 const MIN_MAG = 2.5
+const FUNVISIS_FEED = 'http://www.funvisis.gob.ve/maravilla.json'
 
-// fetch con caché de borde 60s: un pico de tráfico pega a Cloudflare, no a USGS.
+// fetch con caché de borde 60s: un pico de tráfico pega a Cloudflare, no a la fuente.
 const cached = (url: string) =>
   fetch(url, { cf: { cacheTtl: 60, cacheEverything: true } })
 
-export type Quake = {
-  id: string
-  mag: number
-  place: string
-  time: number
-  depth: number
-  lat: number
-  lng: number
-  url: string // página oficial del evento en USGS (fuente comprobable)
-}
+export type { Quake } from './quakes'
 
 // Contornos MMI (GeoJSON): líneas iso-sísmicas = zona afectada por la sacudida.
 export type MmiContours = {
@@ -59,7 +59,7 @@ export const fetchQuakes = createServerFn({ method: 'GET' }).handler(
         geometry: { coordinates: [number, number, number] }
       }>
     }
-    const quakes: Quake[] = (fc.features ?? []).map((f) => ({
+    const usgs: Quake[] = (fc.features ?? []).map((f) => ({
       id: f.id,
       mag: f.properties.mag,
       place: f.properties.place ?? '',
@@ -68,17 +68,40 @@ export const fetchQuakes = createServerFn({ method: 'GET' }).handler(
       lat: f.geometry.coordinates[1],
       lng: f.geometry.coordinates[0],
       url: f.properties.url,
+      source: 'usgs',
     }))
 
+    // FUNVISIS (red local): aporta las réplicas chicas. Si está caído seguimos
+    // solo con USGS — nunca dejamos que tumbe el feed. Filtramos al bbox y a la
+    // ventana de DAYS para que su lista rodante encaje con la de USGS.
+    const sinceMs = Date.now() - DAYS * 86_400_000
+    let funvisis: Quake[] = []
+    try {
+      const geo = (await cached(FUNVISIS_FEED).then((r) => r.json())) as FunvisisGeo
+      funvisis = parseFunvisis(geo).filter(
+        (q) => q.time >= sinceMs && inVenezuela(q.lat, q.lng),
+      )
+    } catch {
+      // FUNVISIS intermitente: degradamos a USGS, no rompemos
+    }
+    const merged = mergeQuakes(usgs, funvisis)
+
     // sismo principal = mayor magnitud de la ventana
-    const main = quakes.reduce<Quake | null>(
+    const main = merged.reduce<Quake | null>(
       (a, q) => (!a || q.mag > a.mag ? q : a),
       null,
     )
 
+    // Solo el episodio del terremoto: nada anterior al día (UTC) del sismo
+    // principal. Quita la sismicidad de fondo previa que ensucia el mapa y
+    // confunde ("¿esto es del terremoto o normal?"). El principal queda dentro.
+    const since = main ? Math.floor(main.time / 86_400_000) * 86_400_000 : 0
+    const quakes = merged.filter((q) => q.time >= since)
+
     let shakemap: MmiContours | null = null
     let forecast: Forecast | null = null
-    if (main) {
+    // ShakeMap y pronóstico son productos de USGS: solo si el principal es de USGS.
+    if (main && main.source === 'usgs') {
       try {
         const detail = (await cached(
           `https://earthquake.usgs.gov/fdsnws/event/1/query?eventid=${main.id}&format=geojson`,

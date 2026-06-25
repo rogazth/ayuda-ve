@@ -14,6 +14,9 @@ function magInk(m: number) {
   return c
 }
 
+// Quién registró el sismo: USGS (catálogo global) o FUNVISIS (red local).
+const srcLabel = (s: Quake['source']) => (s === 'funvisis' ? 'FUNVISIS' : 'USGS')
+
 // Intervalo entre dos sismos del doblete, en la unidad legible más grande.
 function fmtGap(ms: number) {
   const s = Math.round(ms / 1000)
@@ -125,7 +128,7 @@ function QuakeSheet({
                     target="_blank"
                     rel="noopener noreferrer"
                   >
-                    Fuente: USGS · ver más <ExternalLink className="h-[13px] w-[13px]" />
+                    Fuente: {srcLabel(main.source)} · ver más <ExternalLink className="h-[13px] w-[13px]" />
                   </a>
                 </div>
               </div>
@@ -281,7 +284,8 @@ function QuakeSheet({
                       {esPlace(q.place) || 'Venezuela'}
                     </b>
                     <span className="text-[12.5px] text-[#737f82]">
-                      {fmtDateTime(q.time)} · {Math.round(q.depth)} km prof.
+                      {fmtDateTime(q.time)} · {Math.round(q.depth)} km prof. ·{' '}
+                      {srcLabel(q.source)}
                     </span>
                   </span>
                   <ExternalLink className="h-[14px] w-[14px] flex-[0_0_auto] text-[#b3bcbe]" />
@@ -292,7 +296,7 @@ function QuakeSheet({
 
           <Sources
             refs={buildSources(main)}
-            note="Sismos registrados por la red sísmica de USGS. La zona afectada es el ShakeMap oficial; el pronóstico de réplicas es probabilístico."
+            note="Sismos registrados por USGS (catálogo global) y FUNVISIS (red sísmica de Venezuela). La zona afectada es el ShakeMap oficial de USGS; el pronóstico de réplicas es probabilístico."
           />
         </div>
       )}
