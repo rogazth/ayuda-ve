@@ -169,7 +169,7 @@ export const fetchReport = createServerFn({ method: 'GET' })
       meta,
       media: mediaRows.map((m) => ({
         id: m.id,
-        url: `/media/${m.id}`,
+        url: `https://media.ayudave.com/${m.key}`,
         width: m.width,
         height: m.height,
       })),

@@ -10,17 +10,11 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
-import { Route as MediaIdRouteImport } from './routes/media.$id'
 import { Route as ApiReportsIdPhotosRouteImport } from './routes/api.reports.$id.photos'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const MediaIdRoute = MediaIdRouteImport.update({
-  id: '/media/$id',
-  path: '/media/$id',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiReportsIdPhotosRoute = ApiReportsIdPhotosRouteImport.update({
@@ -31,31 +25,27 @@ const ApiReportsIdPhotosRoute = ApiReportsIdPhotosRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
-  '/media/$id': typeof MediaIdRoute
   '/api/reports/$id/photos': typeof ApiReportsIdPhotosRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
-  '/media/$id': typeof MediaIdRoute
   '/api/reports/$id/photos': typeof ApiReportsIdPhotosRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
-  '/media/$id': typeof MediaIdRoute
   '/api/reports/$id/photos': typeof ApiReportsIdPhotosRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/media/$id' | '/api/reports/$id/photos'
+  fullPaths: '/' | '/api/reports/$id/photos'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/media/$id' | '/api/reports/$id/photos'
-  id: '__root__' | '/' | '/media/$id' | '/api/reports/$id/photos'
+  to: '/' | '/api/reports/$id/photos'
+  id: '__root__' | '/' | '/api/reports/$id/photos'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
-  MediaIdRoute: typeof MediaIdRoute
   ApiReportsIdPhotosRoute: typeof ApiReportsIdPhotosRoute
 }
 
@@ -66,13 +56,6 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/media/$id': {
-      id: '/media/$id'
-      path: '/media/$id'
-      fullPath: '/media/$id'
-      preLoaderRoute: typeof MediaIdRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/reports/$id/photos': {
@@ -87,7 +70,6 @@ declare module '@tanstack/react-router' {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
-  MediaIdRoute: MediaIdRoute,
   ApiReportsIdPhotosRoute: ApiReportsIdPhotosRoute,
 }
 export const routeTree = rootRouteImport
