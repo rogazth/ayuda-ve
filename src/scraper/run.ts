@@ -16,6 +16,12 @@ type SourceSummary = {
   error?: string
 }
 
+// Paralelismo por fuente: las fotos y el geo se solapan entre personas.
+// Nominatim sigue a 1 req/s (el throttle de geocode.ts serializa los slots),
+// pero el resto (fetch foto, R2 put, D1 writes) corre concurrentemente.
+// ponytail: 10 workers caben cómodo en el límite de 1000 subrequests/invocación.
+const CONCURRENCY = 10
+
 // Corre todos los scrapers. Aísla fallos por fuente y por persona para que un
 // registro malo no tumbe la corrida. Loguea un resumen (visible en wrangler
 // tail) con los motivos de skip — así se afina el gazetteer con datos reales.
@@ -35,20 +41,26 @@ export async function runScrape(): Promise<Array<SourceSummary>> {
     try {
       const people = await source.fetchPeople()
       s.fetched = people.length
-      for (const p of people) {
-        try {
-          const r = await ingestPerson(db, source, p)
-          if (r.kind === 'inserted') s.inserted++
-          else if (r.kind === 'updated') s.updated++
-          else {
-            s.skipped++
-            s.reasons[r.reason] = (s.reasons[r.reason] ?? 0) + 1
+      const queue = [...people]
+      await Promise.all(
+        Array.from({ length: Math.min(CONCURRENCY, people.length) }, async () => {
+          while (queue.length) {
+            const p = queue.shift()!
+            try {
+              const r = await ingestPerson(db, source, p)
+              if (r.kind === 'inserted') s.inserted++
+              else if (r.kind === 'updated') s.updated++
+              else {
+                s.skipped++
+                s.reasons[r.reason] = (s.reasons[r.reason] ?? 0) + 1
+              }
+            } catch {
+              s.skipped++
+              s.reasons.error = (s.reasons.error ?? 0) + 1
+            }
           }
-        } catch {
-          s.skipped++
-          s.reasons.error = (s.reasons.error ?? 0) + 1
-        }
-      }
+        }),
+      )
     } catch (e) {
       s.error = e instanceof Error ? e.message : String(e)
     }

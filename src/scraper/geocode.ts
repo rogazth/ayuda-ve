@@ -20,13 +20,16 @@ const COARSE = new Set([
 
 const key = (t: string) => t.toLowerCase().replace(/\s+/g, ' ').trim()
 
-// Throttle global a ~1 req/s: política de Nominatim. Solo afecta a los misses
-// (los hits salen de la caché al instante), así que en régimen es gratis.
-let lastCall = 0
+// Throttle global a ~1 req/s: política de Nominatim. Asigna slots en serie para
+// que funcione correctamente bajo concurrencia (cada caller toma el próximo slot
+// disponible antes de await, así no hay race condition).
+let nextCallAt = 0
 async function throttle() {
-  const wait = 1100 - (Date.now() - lastCall)
+  const now = Date.now()
+  const slot = (nextCallAt = Math.max(nextCallAt, now))
+  nextCallAt = slot + 1100
+  const wait = slot - now
   if (wait > 0) await new Promise((r) => setTimeout(r, wait))
-  lastCall = Date.now()
 }
 
 async function nominatim(text: string): Promise<Geo | null> {
