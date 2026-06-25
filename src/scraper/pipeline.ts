@@ -70,6 +70,7 @@ export async function ingestPerson(
 
   const meta = JSON.stringify({
     source: source.id,
+    missingName: p.name,
     age: p.age,
     gender: p.gender,
     status: p.status,
