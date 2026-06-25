@@ -1,0 +1,16 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "ayuda-ve",
+  "compatibility_date": "2025-09-02",
+  "compatibility_flags": ["nodejs_compat"],
+  "main": "@tanstack/react-start/server-entry",
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "ayuda-ve",
+      // Local dev ignora este id. Para deploy: `wrangler d1 create ayuda-ve` y pega el id aquí.
+      "database_id": "REEMPLAZAR_CON_wrangler_d1_create",
+      "migrations_dir": "drizzle/migrations"
+    }
+  ]
+}
