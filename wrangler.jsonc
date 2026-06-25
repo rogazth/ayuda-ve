@@ -9,7 +9,13 @@
       "binding": "DB",
       "database_name": "ayuda-ve",
       "database_id": "e6542654-8d88-4b41-89e6-f6b13ed19e0d",
-      "migrations_dir": "drizzle/migrations"
-    }
-  ]
+      "migrations_dir": "drizzle/migrations",
+    },
+  ],
+  "r2_buckets": [
+    {
+      "binding": "MEDIA",
+      "bucket_name": "ayuda-ve-media",
+    },
+  ],
 }

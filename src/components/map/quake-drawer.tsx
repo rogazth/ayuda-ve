@@ -1,15 +1,9 @@
-import { useState } from 'react'
-import { Drawer } from 'vaul'
 import { Activity, ExternalLink, X } from 'lucide-react'
-import { fmtAge } from '../../reports/reports'
+import { Button } from '@/components/ui/button'
+import { fmtDateTime } from '../../reports/reports'
 import type { Quake, QuakeData } from '../../quakes/quakes.functions'
 import { buildSources, esPlace, magColor } from '../../quakes/quakes'
 import { Sources } from './sources'
-
-// Hoja del terremoto: media pantalla por defecto, expandible arrastrando.
-// SNAP_MIN = solo título + X (el mapa queda visible con el heatmap).
-const SNAP_MIN = '62px'
-const QSNAPS: (number | string)[] = [SNAP_MIN, 0.55, 0.92]
 
 // Color de severidad legible como texto: los tonos claros (amarillo/lima) se
 // oscurecen para pasar contraste sobre blanco. ponytail: ajustar si cambia magColor.
@@ -20,8 +14,17 @@ function magInk(m: number) {
   return c
 }
 
-// Hoja Terremoto (Vaul, no-modal): el mapa sigue vivo arriba. Dueña de su propio
-// snap; el centrado fino del epicentro lo hace el map-screen midiendo `.ave-drawer`.
+// Intervalo entre dos sismos del doblete, en la unidad legible más grande.
+function fmtGap(ms: number) {
+  const s = Math.round(ms / 1000)
+  if (s < 90) return `${s} s`
+  const m = Math.round(s / 60)
+  if (m < 90) return `${m} min`
+  return `${Math.round(m / 60)} h`
+}
+
+// Boletín Terremoto: dialog full-screen con el mismo chrome que el detalle de
+// reporte (flecha de volver + título). Se cierra con la flecha.
 export function QuakeDrawer({
   data,
   main,
@@ -31,58 +34,32 @@ export function QuakeDrawer({
   main: Quake | null
   onClose: () => void
 }) {
-  const [snap, setSnap] = useState<number | string | null>(0.55)
-  const collapsed = snap === SNAP_MIN
   return (
-    <Drawer.Root
-      open
-      modal={false}
-      dismissible={false}
-      handleOnly
-      snapPoints={QSNAPS}
-      activeSnapPoint={snap}
-      setActiveSnapPoint={setSnap}
-    >
-      <Drawer.Portal>
-        {/* --ave-sheet-vh = alto del snap activo: la lista recorta a la
-            franja visible y scrollea dentro, sin tener que expandir. */}
-        <Drawer.Content
-          className="ave-drawer fixed inset-x-0 bottom-0 z-[820] flex h-[100dvh] max-h-[100dvh] flex-col rounded-t-[20px] bg-white text-[#1a1c1e] shadow-[0_-8px_28px_rgba(23,58,64,0.16)] outline-none"
-          style={{
-            ['--ave-sheet-vh' as string]: `${Math.round(
-              (typeof snap === 'number' ? snap : 0.55) * 100,
-            )}dvh`,
-          }}
+    <div className="fixed inset-0 z-[900] flex flex-col bg-white text-[#1a1c1e]">
+      {/* Header — mismo chrome que el detalle de reporte */}
+      <div
+        className="flex flex-[0_0_auto] items-center gap-3 border-b border-[#f3f4f6] px-4"
+        style={{
+          paddingTop: 'max(16px, env(safe-area-inset-top))',
+          paddingBottom: 12,
+        }}
+      >
+        <Activity className="size-5 flex-[0_0_auto] text-[#0e9c8f]" />
+        <span className="flex-1 truncate text-[17px] font-bold">Terremoto</span>
+        <Button
+          variant="ghost"
+          className="grid h-[34px] w-[34px] flex-none place-items-center rounded-full border-0 bg-[#f1f4f2] text-[#416166] hover:bg-[#e7ebe9] hover:text-[#416166]"
+          onClick={onClose}
+          aria-label="Cerrar"
         >
-          <Drawer.Handle className="mx-auto my-[10px] h-[5px] w-[38px] flex-[0_0_auto] rounded-[3px] bg-[#dadde0]" />
-          <Drawer.Title className="sr-only">Terremoto</Drawer.Title>
+          <X className="size-[18px]" />
+        </Button>
+      </div>
 
-          {/* Header siempre visible: en collapsed es lo único que se ve */}
-          <div className="flex flex-[0_0_auto] items-center gap-[8px] px-[18px] pb-[10px]">
-            <Activity className="h-[18px] w-[18px] flex-[0_0_auto] text-[#0e9c8f]" />
-            <span className="flex-1 text-[17px] font-semibold">Terremoto</span>
-            {data && (
-              <span className="rounded-full bg-[#0e9c8f]/10 px-[9px] py-[2px] text-[13px] font-bold text-[#0e9c8f]">
-                {data.quakes.length}
-              </span>
-            )}
-            <button
-              onClick={onClose}
-              aria-label="Cerrar"
-              className="ml-[4px] flex h-[30px] w-[30px] flex-[0_0_auto] items-center justify-center rounded-full bg-[#f0f2f3] text-[#737f82] hover:bg-[#e3e6e8]"
-            >
-              <X className="h-[16px] w-[16px]" />
-            </button>
-          </div>
-
-          {!collapsed && (
-            <div className="flex min-h-0 flex-1 flex-col overflow-hidden px-[18px] pb-[calc(12px+env(safe-area-inset-bottom))]">
-              <QuakeSheet data={data} main={main} />
-            </div>
-          )}
-        </Drawer.Content>
-      </Drawer.Portal>
-    </Drawer.Root>
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden px-[18px] pt-[14px] pb-[calc(12px+env(safe-area-inset-bottom))]">
+        <QuakeSheet data={data} main={main} />
+      </div>
+    </div>
   )
 }
 
@@ -101,58 +78,80 @@ function QuakeSheet({
         Cargando sismos…
       </p>
     )
-  const replicas = data.quakes
-    .filter((q) => q.id !== data.mainId)
-    .sort((a, b) => b.time - a.time)
+  // Todos los sismos del período, en orden cronológico (primero → último).
+  // ponytail: filtra desde medianoche UTC del día del sismo principal
+  const cutoff = main ? Math.floor(main.time / 86400000) * 86400000 : 0
+  const all = [...data.quakes].filter((q) => q.time >= cutoff).sort((a, b) => a.time - b.time)
+  // Sismos fuertes (M≥6): si hay 2+, fue un evento múltiple (doblete).
+  const strong = all.filter((q) => q.mag >= 6)
   const fc = data.forecast
   const pct = (label: string) =>
     Math.round((fc?.windows.find((w) => w.label === label)?.m5 ?? 0) * 100)
 
   return (
     <>
-      <p className="mb-[14px] flex justify-between gap-[8px] text-[12px] text-[#737f82]">
-        <span>Últimos 7 días en Venezuela</span>
-        <span>Datos: USGS</span>
-      </p>
 
       {data.quakes.length === 0 ? (
         <p className="py-[18px] text-center text-[14px] text-[#737f82]">
           Sin sismos registrados en este período.
         </p>
       ) : (
-        <div className="mx-[-18px] max-h-[calc(var(--ave-sheet-vh,55dvh)-96px)] flex-[1_1_auto] overflow-y-auto px-[18px]">
+        <div className="mx-[-18px] min-h-0 flex-1 overflow-y-auto px-[18px]">
           {/* Boletín: magnitud como cifra protagonista */}
           {main && (
-            <div className="mb-[4px] flex items-start gap-[18px] border-b border-[#ededeb] px-[2px] pt-[4px] pb-[18px]">
-              <div
-                className="flex-[0_0_auto] text-center leading-[0.85]"
-                style={{ color: magInk(main.mag) }}
-              >
-                <b className="block text-[58px] font-extrabold tracking-[-3px] tabular-nums">
-                  {main.mag.toFixed(1)}
-                </b>
-                <i className="text-[11px] font-extrabold tracking-[1.2px] uppercase not-italic">
-                  magnitud
-                </i>
-              </div>
-              <div className="min-w-0 pt-[7px]">
-                <b className="block text-[18px] font-bold text-[#173a40]">
-                  Terremoto · {fmtAge(main.time)}
-                </b>
-                <span className="mt-[4px] block text-[13.5px] leading-[1.55] text-[#416166]">
-                  {esPlace(main.place) || 'Venezuela'}
-                  <br />
-                  {Math.round(main.depth)} km de profundidad
-                </span>
-                <a
-                  className="mt-[9px] inline-flex items-center gap-[4px] text-[13px] font-bold text-[#0e9c8f] no-underline"
-                  href={main.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
+            <div className="mb-[4px] border-b border-[#ededeb] px-[2px] pt-[4px] pb-[18px]">
+              <div className="flex items-start gap-[18px]">
+                <div
+                  className="flex-[0_0_auto] text-center leading-[0.85]"
+                  style={{ color: magInk(main.mag) }}
                 >
-                  Ver en USGS <ExternalLink className="h-[13px] w-[13px]" />
-                </a>
+                  <b className="block text-[58px] font-extrabold tracking-[-3px] tabular-nums">
+                    {main.mag.toFixed(1)}
+                  </b>
+                  <i className="text-[11px] font-extrabold tracking-[1.2px] uppercase not-italic">
+                    magnitud
+                  </i>
+                </div>
+                <div className="min-w-0 pt-[7px]">
+                  <span className="block text-[13.5px] leading-[1.55] text-[#416166]">
+                    {esPlace(main.place) || 'Venezuela'}
+                    <br />
+                    {fmtDateTime(main.time)} · {Math.round(main.depth)} km de
+                    profundidad
+                  </span>
+                  <a
+                    className="mt-[9px] inline-flex items-center gap-[4px] text-[13px] font-bold text-[#0e9c8f] no-underline"
+                    href={main.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    Fuente: USGS · ver más <ExternalLink className="h-[13px] w-[13px]" />
+                  </a>
+                </div>
               </div>
+              {/* Doblete: explica que fueron 2+ sismos fuertes y el intervalo */}
+              {strong.length >= 2 && (
+                <p className="mt-[14px] text-[13px] leading-[1.55] text-[#416166]">
+                  {strong.length === 2 ? (
+                    <>
+                      Fueron{' '}
+                      <b className="font-semibold text-[#173a40]">
+                        dos sismos fuertes
+                      </b>
+                      , M{strong[0].mag.toFixed(1)} y M{strong[1].mag.toFixed(1)},
+                      con {fmtGap(strong[1].time - strong[0].time)} de diferencia.
+                    </>
+                  ) : (
+                    <>
+                      Secuencia de{' '}
+                      <b className="font-semibold text-[#173a40]">
+                        {strong.length} sismos fuertes
+                      </b>{' '}
+                      en {fmtGap(strong[strong.length - 1].time - strong[0].time)}.
+                    </>
+                  )}
+                </p>
+              )}
             </div>
           )}
 
@@ -253,17 +252,17 @@ function QuakeSheet({
             </section>
           )}
 
-          {replicas.length > 0 && (
+          {all.length > 0 && (
             <section className="mt-[4px]">
               <div className="mt-[20px] mb-[8px] flex items-baseline gap-[8px]">
                 <h3 className="text-[16px] font-bold text-[#173a40]">
-                  Réplicas registradas
+                  Sismos registrados
                 </h3>
                 <span className="rounded-full bg-[#0e9c8f]/10 px-[9px] py-[2px] text-[13px] font-bold text-[#0e9c8f]">
-                  {replicas.length}
+                  {all.length}
                 </span>
               </div>
-              {replicas.map((q) => (
+              {all.map((q) => (
                 <a
                   key={q.id}
                   className="flex items-center gap-[12px] border-t border-[#ededeb] py-[11px] text-inherit no-underline"
@@ -282,7 +281,7 @@ function QuakeSheet({
                       {esPlace(q.place) || 'Venezuela'}
                     </b>
                     <span className="text-[12.5px] text-[#737f82]">
-                      {fmtAge(q.time)} · {Math.round(q.depth)} km prof.
+                      {fmtDateTime(q.time)} · {Math.round(q.depth)} km prof.
                     </span>
                   </span>
                   <ExternalLink className="h-[14px] w-[14px] flex-[0_0_auto] text-[#b3bcbe]" />
@@ -293,7 +292,7 @@ function QuakeSheet({
 
           <Sources
             refs={buildSources(main)}
-            note="Sismos registrados (no predichos) por la red sísmica de USGS. La zona afectada es el ShakeMap oficial; el pronóstico de réplicas es probabilístico."
+            note="Sismos registrados por la red sísmica de USGS. La zona afectada es el ShakeMap oficial; el pronóstico de réplicas es probabilístico."
           />
         </div>
       )}

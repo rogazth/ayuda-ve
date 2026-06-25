@@ -10,33 +10,53 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as MediaIdRouteImport } from './routes/media.$id'
+import { Route as ApiReportsIdPhotosRouteImport } from './routes/api.reports.$id.photos'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const MediaIdRoute = MediaIdRouteImport.update({
+  id: '/media/$id',
+  path: '/media/$id',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiReportsIdPhotosRoute = ApiReportsIdPhotosRouteImport.update({
+  id: '/api/reports/$id/photos',
+  path: '/api/reports/$id/photos',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/media/$id': typeof MediaIdRoute
+  '/api/reports/$id/photos': typeof ApiReportsIdPhotosRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/media/$id': typeof MediaIdRoute
+  '/api/reports/$id/photos': typeof ApiReportsIdPhotosRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/media/$id': typeof MediaIdRoute
+  '/api/reports/$id/photos': typeof ApiReportsIdPhotosRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/'
+  fullPaths: '/' | '/media/$id' | '/api/reports/$id/photos'
   fileRoutesByTo: FileRoutesByTo
-  to: '/'
-  id: '__root__' | '/'
+  to: '/' | '/media/$id' | '/api/reports/$id/photos'
+  id: '__root__' | '/' | '/media/$id' | '/api/reports/$id/photos'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  MediaIdRoute: typeof MediaIdRoute
+  ApiReportsIdPhotosRoute: typeof ApiReportsIdPhotosRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -48,11 +68,27 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/media/$id': {
+      id: '/media/$id'
+      path: '/media/$id'
+      fullPath: '/media/$id'
+      preLoaderRoute: typeof MediaIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/reports/$id/photos': {
+      id: '/api/reports/$id/photos'
+      path: '/api/reports/$id/photos'
+      fullPath: '/api/reports/$id/photos'
+      preLoaderRoute: typeof ApiReportsIdPhotosRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  MediaIdRoute: MediaIdRoute,
+  ApiReportsIdPhotosRoute: ApiReportsIdPhotosRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

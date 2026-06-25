@@ -7,7 +7,6 @@ export type Pin = {
   confirms: number
   createdAt: number
 }
-// Reportes = capa por defecto del mapa. Sismos = capa que se enciende con el
-// banner. Ayuda ya no es una "vista": es un dialog aparte (helpOpen).
-export type View = 'reportes' | 'sismos'
+// Sin modos: el mapa muestra siempre epicentro + pines. El heatmap (intensidad)
+// y el boletín del terremoto son capas/paneles que se prenden por separado.
 export type Data = { pins: Pin[]; center: [number, number]; tooFar: boolean }

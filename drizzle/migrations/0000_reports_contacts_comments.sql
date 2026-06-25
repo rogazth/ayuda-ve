@@ -16,8 +16,6 @@ CREATE TABLE `contacts` (
 	`source` text NOT NULL,
 	`source_url` text,
 	`status` text DEFAULT 'pending' NOT NULL,
-	`lat` real NOT NULL,
-	`lng` real NOT NULL,
 	`created_at` integer DEFAULT (unixepoch()) NOT NULL,
 	`updated_at` integer DEFAULT (unixepoch()) NOT NULL
 );
@@ -32,6 +30,9 @@ CREATE TABLE `reports` (
 	`confirms` integer DEFAULT 0 NOT NULL,
 	`flags` integer DEFAULT 0 NOT NULL,
 	`status` text DEFAULT 'visible' NOT NULL,
+	`contact` text,
+	`meta` text,
+	`creator_ip` text,
 	`created_at` integer DEFAULT (unixepoch()) NOT NULL,
 	`updated_at` integer DEFAULT (unixepoch()) NOT NULL
 );

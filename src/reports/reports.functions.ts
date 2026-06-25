@@ -1,8 +1,18 @@
 import { createServerFn } from '@tanstack/react-start'
-import { and, desc, eq, gte, lte } from 'drizzle-orm'
+import { getRequestHeader, getRequestIP } from '@tanstack/react-start/server'
+import { and, asc, desc, eq, gte, lte, sql } from 'drizzle-orm'
 import { getDb } from '../db'
-import { reports } from '../db/schema'
+import { comments, media, reportConfirms, reports } from '../db/schema'
 import { TYPES } from './reports'
+
+function clientIp(): string {
+  // CF-Connecting-IP en Workers; getRequestIP() en dev local
+  return getRequestHeader('cf-connecting-ip') ?? getRequestIP() ?? ''
+}
+
+function clientUa(): string {
+  return (getRequestHeader('user-agent') ?? '').slice(0, 250)
+}
 
 // ponytail: dato viejo en emergencia = peligroso. Filtramos a 48h (mvp.md).
 // TODO(albergue): los albergues sembrados deberían exentarse de este filtro.
@@ -60,14 +70,16 @@ type NewReport = {
 }
 
 export const createReport = createServerFn({ method: 'POST' })
-  .validator((d: NewReport): NewReport => ({
-    type: String(d.type),
-    lat: Number(d.lat),
-    lng: Number(d.lng),
-    description: d.description ?? '',
-    contact: d.contact,
-    meta: d.meta,
-  }))
+  .validator(
+    (d: NewReport): NewReport => ({
+      type: String(d.type),
+      lat: Number(d.lat),
+      lng: Number(d.lng),
+      description: d.description ?? '',
+      contact: d.contact,
+      meta: d.meta,
+    }),
+  )
   .handler(async ({ data }) => {
     const db = getDb()
     const [row] = await db
@@ -80,7 +92,143 @@ export const createReport = createServerFn({ method: 'POST' })
         lng: data.lng,
         contact: data.contact ?? null,
         meta: data.meta ?? null,
+        creatorIp: clientIp() || null,
       })
       .returning({ id: reports.id })
     return row
+  })
+
+// JSON serializable: el validador de createServerFn rechaza `unknown`.
+type JsonValue =
+  | string
+  | number
+  | boolean
+  | null
+  | JsonValue[]
+  | { [k: string]: JsonValue }
+
+export type MediaItem = { id: string; url: string; width: number; height: number }
+
+export type ReportDetail = {
+  id: string
+  type: string
+  title: string
+  description: string
+  lat: number
+  lng: number
+  confirms: number
+  contact: string | null
+  createdAt: number
+  meta: Record<string, JsonValue>
+  media: MediaItem[]
+}
+
+// Detalle completo por id (incluye meta + fotos). Por-reporte, no en el bbox:
+// el meta lleva fotos base64 que × 200 pines reventaría el payload de la lista.
+export const fetchReport = createServerFn({ method: 'GET' })
+  .validator((d: { id: string }) => ({ id: String(d.id) }))
+  .handler(async ({ data }): Promise<ReportDetail | null> => {
+    const db = getDb()
+    // .at(0) (no destructuring) para que el tipo sea Report | undefined: el guard
+    // de abajo es real, un id inexistente/oculto devuelve null en vez de crashear.
+    const row = (
+      await db
+        .select()
+        .from(reports)
+        .where(and(eq(reports.id, data.id), eq(reports.status, 'visible')))
+        .limit(1)
+    ).at(0)
+    if (!row) return null
+    let meta: Record<string, JsonValue> = {}
+    try {
+      meta = row.meta ? JSON.parse(row.meta) : {}
+    } catch {
+      /* meta corrupto: lo ignoramos, el resto del reporte sigue siendo útil */
+    }
+    // strip any legacy base64 photos from meta (pre-R2)
+    delete meta.photos
+    const mediaRows = await db
+      .select()
+      .from(media)
+      .where(eq(media.reportId, data.id))
+      .orderBy(asc(media.position))
+    return {
+      id: row.id,
+      type: row.type,
+      title: row.title,
+      description: row.description,
+      lat: row.lat,
+      lng: row.lng,
+      confirms: row.confirms,
+      contact: row.contact,
+      createdAt: row.createdAt.getTime(),
+      meta,
+      media: mediaRows.map((m) => ({
+        id: m.id,
+        url: `/media/${m.id}`,
+        width: m.width,
+        height: m.height,
+      })),
+    }
+  })
+
+export const confirmReport = createServerFn({ method: 'POST' })
+  .validator((d: { id: string }) => ({ id: String(d.id) }))
+  .handler(async ({ data }) => {
+    const db = getDb()
+    const ip = clientIp()
+    const ua = clientUa()
+
+    // Bloquear self-confirm: comparamos IP del creador (si se guardó)
+    if (ip) {
+      const [report] = await db
+        .select({ creatorIp: reports.creatorIp })
+        .from(reports)
+        .where(eq(reports.id, data.id))
+        .limit(1)
+      if (report?.creatorIp && report.creatorIp === ip) return { ok: false, reason: 'self' as const }
+    }
+
+    // Dedup: una confirmación por IP por reporte
+    if (ip) {
+      const existing = await db
+        .select({ id: reportConfirms.id })
+        .from(reportConfirms)
+        .where(and(eq(reportConfirms.reportId, data.id), eq(reportConfirms.ip, ip)))
+        .limit(1)
+      if (existing.length) return { ok: false, reason: 'already' as const }
+    }
+
+    await db.insert(reportConfirms).values({ reportId: data.id, ip, ua })
+    await db
+      .update(reports)
+      .set({ confirms: sql`${reports.confirms} + 1` })
+      .where(eq(reports.id, data.id))
+    return { ok: true }
+  })
+
+// ponytail: auto-oculta a 5 flags; mover a cola de moderación en /admin si
+// aparece abuso coordinado. El anti-doble-voto vive en el cliente (localStorage).
+const FLAG_HIDE = 5
+export const flagReport = createServerFn({ method: 'POST' })
+  .validator((d: { id: string; reason?: string }) => ({
+    id: String(d.id),
+    reason: d.reason ? String(d.reason) : undefined,
+  }))
+  .handler(async ({ data }) => {
+    const db = getDb()
+    await db
+      .update(reports)
+      .set({
+        flags: sql`${reports.flags} + 1`,
+        status: sql`case when ${reports.flags} + 1 >= ${FLAG_HIDE} then 'hidden' else ${reports.status} end`,
+      })
+      .where(eq(reports.id, data.id))
+    // ponytail: el motivo del flag se guarda en `comments` (prefijo [reporte])
+    // hasta que exista /admin con su propia tabla de moderación.
+    const reason = data.reason?.trim()
+    if (reason)
+      await db
+        .insert(comments)
+        .values({ reportId: data.id, text: `[reporte] ${reason}` })
   })

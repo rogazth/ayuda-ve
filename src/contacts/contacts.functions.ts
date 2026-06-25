@@ -2,23 +2,20 @@ import { createServerFn } from '@tanstack/react-start'
 import { and, eq } from 'drizzle-orm'
 import { getDb } from '../db'
 import { contacts } from '../db/schema'
-import { cleanSuggestion, nearestZone, type SuggestionInput } from './contacts'
+import { cleanSuggestion, type SuggestionInput } from './contacts'
 
-// Contactos de la zona del usuario. El cliente manda su GPS; resolvemos la zona
-// por cercanía (haversine) y devolvemos sus contactos visibles. Sin cobertura
-// (zone=null) → el cliente muestra los EMERGENCY nacionales (reports.ts).
-export const fetchLocalContacts = createServerFn({ method: 'GET' })
-  .validator((p: { lat: number; lng: number }) => ({
-    lat: Number(p.lat),
-    lng: Number(p.lng),
-  }))
+// Contactos visibles de un estado.
+export const fetchContactsByZone = createServerFn({ method: 'GET' })
+  .validator((p: { zone: string }) => {
+    if (!p.zone?.trim()) throw new Error('zone requerida')
+    return { zone: p.zone.trim() }
+  })
   .handler(async ({ data }) => {
     const db = getDb()
-    // Tabla chica: una query, el resto en JS (ver nota en schema.ts).
-    const rows = await db.select().from(contacts).where(eq(contacts.status, 'visible'))
-    const zone = nearestZone(rows, data.lat, data.lng)
-    if (!zone) return { zone: null, contacts: [] }
-    return { zone, contacts: rows.filter((r) => r.zone === zone) }
+    return db
+      .select()
+      .from(contacts)
+      .where(and(eq(contacts.zone, data.zone), eq(contacts.status, 'visible')))
   })
 
 // Sugerencia de la comunidad → entra 'pending', no se muestra hasta aprobarse.
@@ -26,21 +23,16 @@ export const suggestContact = createServerFn({ method: 'POST' })
   .validator((input: SuggestionInput) => cleanSuggestion(input))
   .handler(async ({ data }) => {
     const db = getDb()
-    const [row] = await db
-      .insert(contacts)
-      .values({ ...data, source: 'comunidad', status: 'pending' })
-      .returning({ id: contacts.id })
-    return { id: row.id }
+    await db.insert(contacts).values({ ...data, source: 'comunidad', status: 'pending' })
   })
 
-// --- Admin (sin auth aún; el mvp lo difiere a basic auth) ---
+// --- Admin (sin auth aún) ---
 
 export const listPendingContacts = createServerFn({ method: 'GET' }).handler(async () => {
   const db = getDb()
   return db.select().from(contacts).where(eq(contacts.status, 'pending'))
 })
 
-// Aprobar (visible) o rechazar (hidden) una sugerencia.
 export const moderateContact = createServerFn({ method: 'POST' })
   .validator((p: { id: string; status: 'visible' | 'hidden' }) => {
     if (!p.id) throw new Error('id requerido')
@@ -54,5 +46,4 @@ export const moderateContact = createServerFn({ method: 'POST' })
       .update(contacts)
       .set({ status: data.status })
       .where(and(eq(contacts.id, data.id), eq(contacts.status, 'pending')))
-    return { ok: true }
   })

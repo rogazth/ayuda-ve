@@ -6,7 +6,7 @@
       "idx": 0,
       "version": "6",
       "when": 1782366393560,
-      "tag": "0000_init",
+      "tag": "0000_reports_contacts_comments",
       "breakpoints": true
     },
     {
@@ -14,6 +14,27 @@
       "version": "6",
       "when": 1782366397606,
       "tag": "0001_seed_contacts",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1782366500000,
+      "tag": "0003_suggestions",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1782366500001,
+      "tag": "0004_media",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1782366500002,
+      "tag": "0005_report_confirms",
       "breakpoints": true
     }
   ]

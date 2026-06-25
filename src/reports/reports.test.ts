@@ -1,5 +1,15 @@
 import { expect, test } from 'vitest'
-import { TYPES, fmtDist, haversine, typeOf } from './reports'
+import {
+  TYPES,
+  canContact,
+  fmtDist,
+  formatVePhone,
+  haversine,
+  isValidVePhone,
+  metaFields,
+  phoneIntl,
+  typeOf,
+} from './reports'
 import { inVenezuela } from '../quakes/quakes'
 
 test('haversine ~111 km por grado de longitud en el ecuador', () => {
@@ -15,8 +25,48 @@ test('fmtDist redondea metros y pasa a km', () => {
 })
 
 test('typeOf cae en "otro" para tipos desconocidos', () => {
-  expect(typeOf('heridos').color).toBe('#E03131')
+  expect(typeOf('trapped').color).toBe('#E03131')
   expect(typeOf('???')).toBe(TYPES.otro)
+})
+
+test('metaFields mapea por tipo: arrays → chips, strings → texto, ignora vacíos y photos', () => {
+  const f = metaFields('need', {
+    items: ['Agua', 'Comida'],
+    count: '2–5',
+    photos: ['data:...'],
+    state: '',
+  })
+  expect(f).toEqual([
+    { label: 'Necesita', chips: ['Agua', 'Comida'] },
+    { label: 'Personas', text: '2–5' },
+  ])
+  expect(metaFields('???', { x: 1 })).toEqual([]) // tipo desconocido no crashea
+})
+
+test('phoneIntl normaliza a dígitos con prefijo 58', () => {
+  expect(phoneIntl('4141234567')).toBe('584141234567')
+  expect(phoneIntl('+58 414-123 4567')).toBe('584141234567')
+  expect(phoneIntl('')).toBeNull()
+  expect(phoneIntl(null)).toBeNull()
+})
+
+test('formatVePhone agrupa 3-3-4 y recorta a 10 dígitos', () => {
+  expect(formatVePhone('4141234567')).toBe('414 123 4567')
+  expect(formatVePhone('+58 (414) 123-4567 99')).toBe('414 123 4567')
+  expect(formatVePhone('414')).toBe('414')
+})
+
+test('isValidVePhone: 10 dígitos empezando en 2 o 4', () => {
+  expect(isValidVePhone('4141234567')).toBe(true)
+  expect(isValidVePhone('2121234567')).toBe(true)
+  expect(isValidVePhone('414123456')).toBe(false) // 9 dígitos
+  expect(isValidVePhone('5141234567')).toBe(false) // empieza en 5
+})
+
+test('canContact: danger nunca, resto solo con teléfono', () => {
+  expect(canContact('trapped', '4141234567')).toBe(true)
+  expect(canContact('trapped', null)).toBe(false)
+  expect(canContact('danger', '4141234567')).toBe(false)
 })
 
 test('inVenezuela acepta el país y rechaza el exterior', () => {
