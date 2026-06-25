@@ -34,6 +34,8 @@ export const reports = sqliteTable(
     flags: integer('flags').notNull().default(0),
     status: text('status').notNull().default('visible'), // visible | hidden
     contact: text('contact'),
+    url: text('url'), // fuente externa verificable (tweet, post, etc.)
+    verified: integer('verified', { mode: 'boolean' }).notNull().default(false),
     meta: text('meta'), // JSON blob con campos específicos por tipo
     creatorIp: text('creator_ip'), // para bloquear self-confirm
     ...timestamps(),

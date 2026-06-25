@@ -118,6 +118,8 @@ export type ReportDetail = {
   lng: number
   confirms: number
   contact: string | null
+  url: string | null
+  verified: boolean
   createdAt: number
   meta: Record<string, JsonValue>
   media: MediaItem[]
@@ -161,6 +163,8 @@ export const fetchReport = createServerFn({ method: 'GET' })
       lng: row.lng,
       confirms: row.confirms,
       contact: row.contact,
+      url: row.url ?? null,
+      verified: row.verified,
       createdAt: row.createdAt.getTime(),
       meta,
       media: mediaRows.map((m) => ({

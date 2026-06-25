@@ -20,17 +20,38 @@ if (typeof window !== 'undefined') {
 export const Route = createRootRoute({
   head: () => ({
     meta: [
-      {
-        charSet: 'utf-8',
-      },
+      { charSet: 'utf-8' },
       {
         name: 'viewport',
         content:
           'width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover',
       },
+      { title: 'AyudaVE — Reportes de emergencia en Venezuela' },
       {
-        title: 'AyudaVE — Reportes de emergencia',
+        name: 'description',
+        content:
+          'Mapa colaborativo de reportes de emergencia en Venezuela. Reporta y consulta incidentes, sismos y alertas en tiempo real.',
       },
+      { property: 'og:type', content: 'website' },
+      { property: 'og:site_name', content: 'AyudaVE' },
+      { property: 'og:url', content: 'https://ayudave.com' },
+      { property: 'og:title', content: 'AyudaVE — Reportes de emergencia en Venezuela' },
+      {
+        property: 'og:description',
+        content:
+          'Mapa colaborativo de reportes de emergencia en Venezuela. Reporta y consulta incidentes, sismos y alertas en tiempo real.',
+      },
+      { property: 'og:image', content: 'https://ayudave.com/og.png' },
+      { property: 'og:image:width', content: '1200' },
+      { property: 'og:image:height', content: '630' },
+      { name: 'twitter:card', content: 'summary_large_image' },
+      { name: 'twitter:title', content: 'AyudaVE — Reportes de emergencia en Venezuela' },
+      {
+        name: 'twitter:description',
+        content:
+          'Mapa colaborativo de reportes de emergencia en Venezuela. Reporta y consulta incidentes, sismos y alertas en tiempo real.',
+      },
+      { name: 'twitter:image', content: 'https://ayudave.com/og.png' },
     ],
     links: [
       {

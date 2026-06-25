@@ -1,5 +1,6 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import {
+  BadgeCheck,
   Check,
   ChevronLeft,
   Flag,
@@ -68,40 +69,123 @@ function TypeMark({ type }: { type: string }) {
 // carrusel — el índice activo sale de scrollLeft/clientWidth en onScroll.
 function PhotoSlider({ photos }: { photos: string[] }) {
   const [active, setActive] = useState(0)
+  const [lightbox, setLightbox] = useState<number | null>(null)
+
   if (photos.length < 2)
     return (
-      <img
-        src={photos[0]}
-        alt=""
-        className="aspect-[4/3] w-full bg-[#f3f4f6] object-cover"
-      />
+      <>
+        <img
+          src={photos[0]}
+          alt=""
+          onClick={() => setLightbox(0)}
+          className="h-[260px] w-full cursor-pointer bg-[#f3f4f6] object-cover"
+        />
+        {lightbox !== null && (
+          <PhotoLightbox photos={photos} initial={lightbox} onClose={() => setLightbox(null)} />
+        )}
+      </>
     )
   return (
-    <div className="relative">
+    <>
+      <div className="relative">
+        <div
+          onScroll={(e) => {
+            const el = e.currentTarget
+            setActive(Math.round(el.scrollLeft / el.clientWidth))
+          }}
+          className="flex h-[260px] w-full snap-x snap-mandatory overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+        >
+          {photos.map((src, i) => (
+            <img
+              key={i}
+              src={src}
+              alt=""
+              onClick={() => setLightbox(i)}
+              className="h-full w-full flex-shrink-0 cursor-pointer snap-center bg-[#f3f4f6] object-cover"
+            />
+          ))}
+        </div>
+        <div className="absolute bottom-2.5 left-1/2 flex -translate-x-1/2 gap-1.5 [filter:drop-shadow(0_1px_2px_rgba(0,0,0,0.45))]">
+          {photos.map((_, i) => (
+            <span
+              key={i}
+              className={`h-1.5 rounded-full transition-all ${i === active ? 'w-4 bg-white' : 'w-1.5 bg-white/60'}`}
+            />
+          ))}
+        </div>
+      </div>
+      {lightbox !== null && (
+        <PhotoLightbox photos={photos} initial={lightbox} onClose={() => setLightbox(null)} />
+      )}
+    </>
+  )
+}
+
+function PhotoLightbox({
+  photos,
+  initial,
+  onClose,
+}: {
+  photos: string[]
+  initial: number
+  onClose: () => void
+}) {
+  const [active, setActive] = useState(initial)
+  const ref = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    const el = ref.current
+    if (el) el.scrollLeft = initial * el.clientWidth
+  }, [])
+
+  return (
+    <div className="fixed inset-0 z-[980] flex flex-col bg-black">
       <div
+        className="flex items-center justify-between px-4 pb-3"
+        style={{ paddingTop: 'max(16px, env(safe-area-inset-top))' }}
+      >
+        <span className="text-[14px] text-white/60">
+          {active + 1} / {photos.length}
+        </span>
+        <button
+          type="button"
+          onClick={onClose}
+          aria-label="Cerrar"
+          className="grid h-[34px] w-[34px] place-items-center rounded-full bg-white/15"
+        >
+          <X className="size-5 text-white" />
+        </button>
+      </div>
+      <div
+        ref={ref}
         onScroll={(e) => {
           const el = e.currentTarget
           setActive(Math.round(el.scrollLeft / el.clientWidth))
         }}
-        className="flex aspect-[4/3] w-full snap-x snap-mandatory overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+        className="flex flex-1 snap-x snap-mandatory overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
       >
         {photos.map((src, i) => (
-          <img
+          <div
             key={i}
-            src={src}
-            alt=""
-            className="h-full w-full flex-shrink-0 snap-center bg-[#f3f4f6] object-cover"
-          />
+            className="flex h-full w-full flex-shrink-0 snap-center items-center justify-center"
+          >
+            <img src={src} alt="" className="max-h-full max-w-full object-contain" />
+          </div>
         ))}
       </div>
-      <div className="absolute bottom-2.5 left-1/2 flex -translate-x-1/2 gap-1.5 [filter:drop-shadow(0_1px_2px_rgba(0,0,0,0.45))]">
-        {photos.map((_, i) => (
-          <span
-            key={i}
-            className={`h-1.5 rounded-full transition-all ${i === active ? 'w-4 bg-white' : 'w-1.5 bg-white/60'}`}
-          />
-        ))}
-      </div>
+      {photos.length > 1 && (
+        <div
+          className="flex justify-center gap-1.5 pt-3"
+          style={{ paddingBottom: 'max(20px, env(safe-area-inset-bottom))' }}
+        >
+          {photos.map((_, i) => (
+            <span
+              key={i}
+              className={`h-1.5 rounded-full transition-all ${i === active ? 'w-4 bg-white' : 'w-1.5 bg-white/40'}`}
+            />
+          ))}
+        </div>
+      )}
     </div>
   )
 }
@@ -312,34 +396,56 @@ function Body({
           </p>
         )}
 
-        {/* Nota de confianza: el contenido es de la comunidad, sin verificar */}
+        {/* Badge de confianza: verificado si viene de entidad conocida, warning si no */}
         <div className="mt-6 px-5">
-          <div className="flex items-start gap-2.5 rounded-2xl border border-[#fed7aa] bg-[#fff7ed] px-4 py-3">
-            <TriangleAlert className="mt-0.5 size-5 flex-shrink-0 text-[#ea580c]" />
-            <p className="text-[13px] leading-snug text-[#9a3412]">
-              Reporte de la comunidad. Confirma con fuentes oficiales antes de
-              actuar.
-            </p>
-          </div>
+          {report.verified ? (
+            <div className="rounded-2xl border border-[#bbf7d0] bg-[#f0fdf4] px-4 py-3">
+              <div className="flex items-center gap-2 text-[#15803d]">
+                <BadgeCheck className="size-5 flex-shrink-0" />
+                <span className="text-[13px] font-semibold">Entidad verificada</span>
+              </div>
+              {report.url && (
+                <a
+                  href={report.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="mt-2.5 flex items-center justify-center gap-2 rounded-xl border border-[#86efac] bg-white py-2.5 text-[14px] font-semibold text-[#15803d]"
+                >
+                  <Link2 className="size-4" />
+                  Ver publicación original
+                </a>
+              )}
+            </div>
+          ) : (
+            <div className="flex items-start gap-2.5 rounded-2xl border border-[#fed7aa] bg-[#fff7ed] px-4 py-3">
+              <TriangleAlert className="mt-0.5 size-5 flex-shrink-0 text-[#ea580c]" />
+              <p className="text-[13px] leading-snug text-[#9a3412]">
+                Reporte de la comunidad. Confirma con fuentes oficiales antes de
+                actuar.
+              </p>
+            </div>
+          )}
         </div>
 
-        {/* Confirmaciones */}
-        <div className="mt-4 px-5">
-          <div className="flex items-center justify-between rounded-2xl bg-[#f0fdf9] px-4 py-3">
-            <span className="text-[14px] text-[#173a40]">
-              <b className="tabular-nums">{confirms}</b>{' '}
-              {confirms === 1 ? 'persona confirma' : 'personas confirman'}
-            </span>
-            <button
-              type="button"
-              onClick={onConfirm}
-              disabled={confirmed}
-              className="rounded-full bg-[#0e9c8f] px-4 py-2 text-[13px] font-bold text-white disabled:bg-[#9bd4cd]"
-            >
-              {confirmed ? '✓ Confirmado' : 'Confirmar'}
-            </button>
+        {/* Confirmaciones — solo en reportes no verificados */}
+        {!report.verified && (
+          <div className="mt-4 px-5">
+            <div className="flex items-center justify-between rounded-2xl bg-[#f0fdf9] px-4 py-3">
+              <span className="text-[14px] text-[#173a40]">
+                <b className="tabular-nums">{confirms}</b>{' '}
+                {confirms === 1 ? 'persona confirma' : 'personas confirman'}
+              </span>
+              <button
+                type="button"
+                onClick={onConfirm}
+                disabled={confirmed}
+                className="rounded-full bg-[#0e9c8f] px-4 py-2 text-[13px] font-bold text-white disabled:bg-[#9bd4cd]"
+              >
+                {confirmed ? '✓ Confirmado' : 'Confirmar'}
+              </button>
+            </div>
           </div>
-        </div>
+        )}
 
         {/* Reportar abuso */}
         <div className="mt-4 mb-2 px-5">
