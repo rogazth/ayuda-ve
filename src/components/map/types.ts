@@ -9,4 +9,11 @@ export type Pin = {
 }
 // Sin modos: el mapa muestra siempre epicentro + pines. El heatmap (intensidad)
 // y el boletín del terremoto son capas/paneles que se prenden por separado.
-export type Data = { pins: Pin[]; center: [number, number]; tooFar: boolean }
+// announce: true solo en refrescos del poll (viewport quieto). En pan/zoom va
+// false: traer un reporte reciente al viewport al mover no es "nuevo".
+export type Data = {
+  pins: Pin[]
+  center: [number, number]
+  tooFar: boolean
+  announce: boolean
+}

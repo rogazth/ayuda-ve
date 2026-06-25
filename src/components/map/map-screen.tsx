@@ -33,7 +33,13 @@ import type {
   QuakeData,
   MmiContours,
 } from '../../quakes/quakes.functions'
-import { VE_BOUNDS, esPlace, inVenezuela, magColor } from '../../quakes/quakes'
+import {
+  VE_BOUNDS,
+  esPlace,
+  inVenezuela,
+  magColor,
+  quakeOpacity,
+} from '../../quakes/quakes'
 import type { Pin, Data } from './types'
 import { QuakeDrawer } from './quake-drawer'
 import { HelpDialog } from './help-dialog'
@@ -204,13 +210,17 @@ const youIcon = L.divIcon({
 })
 
 function quakeIcon(q: Quake, main: boolean) {
-  const size = Math.max(14, Math.round(q.mag * 6))
+  const size = Math.max(9, Math.round(q.mag * 6))
+  // Recencia: el principal siempre nítido; el resto se desvanece con la edad
+  // (grande o reciente resalta, chico y viejo se va al fondo). Se recalcula en
+  // cada poll de 60s, de sobra para un fade medido en horas.
+  const op = main ? 1 : quakeOpacity(q.mag, Date.now() - q.time)
   const ripple = main
     ? " before:content-[''] before:absolute before:inset-0 before:rounded-full before:border-2 before:border-[color:var(--c)] before:animate-epi-ripple before:motion-reduce:animate-none after:content-[''] after:absolute after:inset-0 after:rounded-full after:border-2 after:border-[color:var(--c)] after:animate-epi-ripple after:[animation-delay:1.3s] after:motion-reduce:animate-none"
     : ''
   return L.divIcon({
     className: '!bg-none !border-none',
-    html: `<span class="block rounded-full bg-[var(--c)] shadow-[0_0_0_2px_#fff,0_1px_4px_rgba(0,0,0,0.35)] relative${ripple}" style="--c:${magColor(q.mag)};width:${size}px;height:${size}px"></span>`,
+    html: `<span class="block rounded-full bg-[var(--c)] shadow-[0_0_0_2px_#fff,0_1px_4px_rgba(0,0,0,0.35)] relative${ripple}" style="--c:${magColor(q.mag)};width:${size}px;height:${size}px;opacity:${op}"></span>`,
     iconSize: [size, size],
     iconAnchor: [size / 2, size / 2],
   })
@@ -234,41 +244,46 @@ function MapController({
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const reqId = useRef(0)
 
-  const load = useCallback(() => {
-    const c = map.getCenter()
-    const center: [number, number] = [c.lat, c.lng]
-    if (map.getZoom() < MIN_ZOOM) {
-      onData({ pins: [], center, tooFar: true })
-      return
-    }
-    const b = map.getBounds()
-    const id = ++reqId.current
-    fetchReportsInBounds({
-      data: {
-        s: b.getSouth(),
-        n: b.getNorth(),
-        w: b.getWest(),
-        e: b.getEast(),
-      },
-    })
-      .then((pins) => {
-        if (id === reqId.current) onData({ pins, center, tooFar: false })
+  const load = useCallback(
+    (announce: boolean) => {
+      const c = map.getCenter()
+      const center: [number, number] = [c.lat, c.lng]
+      if (map.getZoom() < MIN_ZOOM) {
+        onData({ pins: [], center, tooFar: true, announce })
+        return
+      }
+      const b = map.getBounds()
+      const id = ++reqId.current
+      fetchReportsInBounds({
+        data: {
+          s: b.getSouth(),
+          n: b.getNorth(),
+          w: b.getWest(),
+          e: b.getEast(),
+        },
       })
-      .catch(() => {
-        if (id === reqId.current) onData({ pins: [], center, tooFar: false })
-      })
-  }, [map, onData])
+        .then((pins) => {
+          if (id === reqId.current) onData({ pins, center, tooFar: false, announce })
+        })
+        .catch(() => {
+          if (id === reqId.current)
+            onData({ pins: [], center, tooFar: false, announce })
+        })
+    },
+    [map, onData],
+  )
 
+  // Pan/zoom: refresca pines en silencio (announce=false).
   const schedule = useCallback(() => {
     if (timer.current) clearTimeout(timer.current)
-    timer.current = setTimeout(load, 350)
+    timer.current = setTimeout(() => load(false), 350)
   }, [load])
 
   useMapEvents({ moveend: schedule })
 
   useEffect(() => {
     onMap(map)
-    load()
+    load(false)
     if ('geolocation' in navigator) {
       navigator.geolocation.getCurrentPosition(
         (pos) => {
@@ -288,8 +303,9 @@ function MapController({
     }
   }, [])
 
+  // Poll / refresh (refreshKey): viewport quieto → announce=true para sonar.
   useEffect(() => {
-    load()
+    load(true)
   }, [load, refreshKey])
 
   return null
@@ -385,8 +401,10 @@ export default function MapScreen() {
       seededRef.current = true
       return
     }
+    // newFreshPins siembra `seen` con todos los pines visibles (también en pan),
+    // así un pan silencioso no deja que el siguiente poll los re-anuncie.
     const fresh = newFreshPins(d.pins, seen, Date.now(), FRESH_NEW_MS)
-    if (fresh.length) {
+    if (d.announce && fresh.length) {
       beep()
       toast(
         fresh.length === 1
