@@ -4,7 +4,7 @@ import { env } from 'cloudflare:workers'
 import { and, asc, desc, eq, gte, inArray, lt, lte, ne, or, sql } from 'drizzle-orm'
 import { getDb } from '../db'
 import { comments, media, reportConfirms, reports } from '../db/schema'
-import { TYPES } from './reports'
+import { TYPES, safeUrl } from './reports'
 
 function clientIp(): string {
   // CF-Connecting-IP en Workers; getRequestIP() en dev local
@@ -355,6 +355,7 @@ type NewReport = {
   description?: string
   contact?: string
   meta?: string
+  url?: string
 }
 
 export const createReport = createServerFn({ method: 'POST' })
@@ -384,7 +385,10 @@ export const createReport = createServerFn({ method: 'POST' })
         throw new Error('meta inválido')
       }
     }
-    return { type, lat, lng, description, contact, meta }
+    // Fuente/url: solo http(s) sin credenciales (safeUrl). Inválida → se descarta
+    // (campo opcional); el cliente ya la bloquea, esto cierra el trust boundary.
+    const url = d.url ? (safeUrl(String(d.url).slice(0, 500)) ?? undefined) : undefined
+    return { type, lat, lng, description, contact, meta, url }
   })
   .handler(async ({ data }) => {
     const db = getDb()
@@ -398,6 +402,7 @@ export const createReport = createServerFn({ method: 'POST' })
         lng: data.lng,
         contact: data.contact ?? null,
         meta: data.meta ?? null,
+        url: data.url ?? null,
         creatorIp: (await clientIpHash()) || null,
       })
       .returning({ id: reports.id })

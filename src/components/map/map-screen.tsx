@@ -40,6 +40,7 @@ import { QuakeDrawer } from './quake-drawer'
 import { HelpDialog } from './help-dialog'
 import { AboutDialog } from './about-dialog'
 import { ReportWizard } from './report-wizard'
+import { LocationPicker } from './location-picker'
 import { ReportDetailScreen } from './report-detail'
 import { toast } from 'sonner'
 
@@ -199,12 +200,16 @@ function pinIcon(p: Pin) {
 
 // Burbuja teal con la marca (no el skin azul por defecto de markercluster — por
 // eso solo importamos MarkerCluster.css, no el .Default.css). La usan el cluster y
-// los puntos apilados (n>1). 'k' arriba de 999 para no romper el círculo.
-const fmtCount = (n: number) => (n > 999 ? `${(n / 1000).toFixed(1)}k` : `${n}`)
+// los puntos apilados (n>1). Conteo "+N mil" (no "k": un venezolano común no lo
+// lee); el "+" dice "más de" y redondea hacia abajo. 1.999 → "+1 mil".
+const fmtCount = (n: number) => (n >= 1000 ? `+${Math.floor(n / 1000)} mil` : `${n}`)
 function bubbleIcon(n: number) {
+  const label = fmtCount(n)
+  // "+10 mil" (7 chars) no entra a 13px en el círculo de 40px → baja la fuente.
+  const size = label.length >= 5 ? 'text-[10px]' : 'text-[13px]'
   return L.divIcon({
     className: '!bg-none !border-none',
-    html: `<div class="grid place-items-center w-[40px] h-[40px] rounded-full bg-[#173a40] text-white text-[13px] font-bold tabular-nums border-[3px] border-white [filter:drop-shadow(0_3px_6px_rgba(0,0,0,0.3))]">${fmtCount(n)}</div>`,
+    html: `<div class="grid place-items-center w-[40px] h-[40px] rounded-full bg-[#173a40] text-white ${size} font-bold tabular-nums leading-none text-center border-[3px] border-white [filter:drop-shadow(0_3px_6px_rgba(0,0,0,0.3))]">${label}</div>`,
     iconSize: [40, 40],
     iconAnchor: [20, 20],
   })
@@ -435,7 +440,10 @@ export default function MapScreen({
   const [userEstado, setUserEstado] = useState<string | null>(null)
   const [seed] = useState<[number, number]>(seedCenter)
   const mapRef = useRef<L.Map | null>(null)
-  const [wizardOpen, setWizardOpen] = useState(false)
+  // Flujo de reporte: 'picking' = elegir ubicación sobre el mapa vivo (oculta el
+  // chrome); 'form' = wizard (tipo→detalle→contacto) ya con la ubicación elegida.
+  const [reportFlow, setReportFlow] = useState<'idle' | 'picking' | 'form'>('idle')
+  const [pickedLoc, setPickedLoc] = useState<[number, number] | null>(null)
   const [refreshKey, setRefreshKey] = useState(0)
   const [satellite, setSatellite] = useState(false)
   // GPS confirmó al usuario fuera de Venezuela → ocultamos "Mi ubicación"
@@ -642,29 +650,46 @@ export default function MapScreen({
       {tab === 'avisos' && <TabPlaceholder title="Avisos" />}
       {tab === 'mas' && <TabPlaceholder title="Más" />}
 
-      <MapChrome
-        quakes={quakes}
-        satellite={satellite}
-        heatmap={heatmap}
-        outsideVE={outsideVE}
-        infoOpen={infoOpen}
-        tab={tab}
-        onTab={setTab}
-        onBanner={() => setInfoOpen(true)}
-        onHelp={() => setHelpOpen(true)}
-        onEmergency={() => setHelpOpen(true)}
-        onToggleSatellite={() => setSatellite((s) => !s)}
-        onToggleHeatmap={() => setHeatmap((h) => !h)}
-        onRecenter={recenter}
-        onReport={() => setWizardOpen(true)}
-      />
+      {/* Elegir ubicación sobre el mapa vivo: el chrome se oculta y aparece la
+          búsqueda + X + pin central + botón confirmar. El mapa no se mueve. */}
+      {reportFlow !== 'picking' && (
+        <MapChrome
+          quakes={quakes}
+          satellite={satellite}
+          heatmap={heatmap}
+          outsideVE={outsideVE}
+          infoOpen={infoOpen}
+          tab={tab}
+          onTab={setTab}
+          onBanner={() => setInfoOpen(true)}
+          onHelp={() => setHelpOpen(true)}
+          onEmergency={() => setHelpOpen(true)}
+          onToggleSatellite={() => setSatellite((s) => !s)}
+          onToggleHeatmap={() => setHeatmap((h) => !h)}
+          onRecenter={recenter}
+          onReport={() => setReportFlow('picking')}
+        />
+      )}
+
+      {reportFlow === 'picking' && (
+        <LocationPicker
+          mapRef={mapRef}
+          onConfirm={(loc) => {
+            setPickedLoc(loc)
+            setReportFlow('form')
+          }}
+          onCancel={() => setReportFlow('idle')}
+        />
+      )}
 
       <ReportWizard
-        open={wizardOpen}
-        onClose={() => setWizardOpen(false)}
-        userLocation={user}
+        open={reportFlow === 'form'}
+        location={pickedLoc}
+        onClose={() => setReportFlow('idle')}
+        onBack={() => setReportFlow('picking')}
         onSubmitDone={(id) => {
           setRefreshKey((k) => k + 1)
+          setReportFlow('idle')
           toast.success('Reporte enviado', {
             description:
               'Gracias por reportar. Tu reporte ya es visible en el mapa.',

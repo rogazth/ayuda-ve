@@ -1,12 +1,8 @@
 import { useState, useEffect, useRef } from 'react'
-import { ChevronLeft, X, MapPin, Search } from 'lucide-react'
-import { MapContainer, TileLayer, useMapEvents } from 'react-leaflet'
-import type { Map as LeafletMap } from 'leaflet'
-import 'leaflet/dist/leaflet.css'
+import { ChevronLeft, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { createReport } from '../../reports/reports.functions'
-import { geoSuggest, geoRetrieve, type Suggestion } from '../../geo/geo.functions'
-import { formatVePhone, isValidVePhone, veDigits } from '../../reports/reports'
+import { formatVePhone, isValidVePhone, safeUrl, veDigits } from '../../reports/reports'
 
 type ReportType =
   | 'trapped'
@@ -20,7 +16,7 @@ type ReportType =
   | 'road'
   | 'security'
   | 'flood'
-type Step = 'type' | 'location' | 'details' | 'contact'
+type Step = 'type' | 'details' | 'contact'
 
 type PhotoDraft = { preview: string; blob: Blob; width: number; height: number }
 
@@ -49,10 +45,9 @@ type Draft = {
   floodLevel?: string
   contact?: string
   description?: string
+  url?: string
   photos?: PhotoDraft[]
 }
-
-const VE_QUAKE: [number, number] = [10.4, -68.5]
 
 const TYPE_CARDS: { key: ReportType; emoji: string; label: string }[] = [
   { key: 'trapped', emoji: '🆘', label: 'Persona atrapada' },
@@ -92,135 +87,6 @@ const SECURITY_TYPES = ['Saqueo', 'Vandalismo', 'Zona de riesgo']
 const FLOOD_LEVELS = ['Baja', 'Media', 'Alta']
 
 // --- small reusable pieces ---
-
-// Uber-style: the map center IS the location. Reports center coords on every move.
-function CenterTracker({
-  onChange,
-}: {
-  onChange: (p: [number, number]) => void
-}) {
-  const map = useMapEvents({
-    moveend: () => {
-      const c = map.getCenter()
-      onChange([c.lat, c.lng])
-    },
-  })
-  return null
-}
-
-// Autocomplete via Mapbox Search Box API (geoSuggest/geoRetrieve, server-side).
-// suggest+retrieve share a session_token so Mapbox bills them as one session;
-// it rotates after each pick. flyTo fires moveend → CenterTracker updates the pin.
-function LocationSearch({
-  mapRef,
-  onSelect,
-}: {
-  mapRef: React.RefObject<LeafletMap | null>
-  onSelect: (p: [number, number]) => void
-}) {
-  const [q, setQ] = useState('')
-  const [results, setResults] = useState<Suggestion[]>([])
-  const [loading, setLoading] = useState(false)
-  const [open, setOpen] = useState(false)
-  const skip = useRef(false)
-  const session = useRef(crypto.randomUUID())
-
-  useEffect(() => {
-    // Skip the re-search caused by pick() writing the chosen label into q.
-    if (skip.current) {
-      skip.current = false
-      return
-    }
-    const query = q.trim()
-    if (query.length < 3) {
-      setResults([])
-      return
-    }
-    let cancelled = false
-    const t = setTimeout(async () => {
-      setLoading(true)
-      try {
-        const c = mapRef.current?.getCenter()
-        const res = await geoSuggest({
-          data: {
-            q: query,
-            session: session.current,
-            proximity: c ? `${c.lng},${c.lat}` : undefined,
-          },
-        })
-        if (cancelled) return
-        setResults(res)
-        setOpen(true)
-      } catch {
-        /* offline — leave previous results */
-      } finally {
-        if (!cancelled) setLoading(false)
-      }
-    }, 450)
-    return () => {
-      cancelled = true
-      clearTimeout(t)
-    }
-  }, [q, mapRef])
-
-  const pick = async (r: Suggestion) => {
-    skip.current = true
-    setQ(r.name)
-    setResults([])
-    setOpen(false)
-    const p = await geoRetrieve({ data: { id: r.id, session: session.current } })
-    session.current = crypto.randomUUID() // retrieve cierra la sesión: rota el token
-    if (!p) return
-    onSelect(p)
-    mapRef.current?.flyTo(p, 16, { duration: 0.6 })
-  }
-
-  return (
-    <div className="absolute top-3 inset-x-3 z-[1000]">
-      <div className="flex items-center gap-2 bg-white rounded-xl shadow-lg px-3 py-2.5">
-        <Search className="size-4 text-[#6b7280] flex-shrink-0" />
-        <input
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
-          onFocus={() => results.length > 0 && setOpen(true)}
-          placeholder="Buscar dirección, urbanización o estado…"
-          className="flex-1 text-sm text-[#1a1c1e] bg-transparent outline-none"
-        />
-        {loading && <span className="text-xs text-[#9ca3af]">…</span>}
-        {q && (
-          <button
-            type="button"
-            onClick={() => {
-              setQ('')
-              setResults([])
-              setOpen(false)
-            }}
-          >
-            <X className="size-4 text-[#9ca3af]" />
-          </button>
-        )}
-      </div>
-      {open && results.length > 0 && (
-        <div className="mt-1.5 bg-white rounded-xl shadow-lg max-h-64 overflow-y-auto">
-          {results.map((r) => (
-            <button
-              key={r.id}
-              type="button"
-              onClick={() => pick(r)}
-              className="flex items-start gap-2 w-full text-left px-3 py-2.5 hover:bg-[#f3f4f6] border-b border-[#f3f4f6] last:border-0"
-            >
-              <MapPin className="size-4 text-[#0e9c8f] flex-shrink-0 mt-0.5" />
-              <span className="text-sm text-[#1a1c1e] leading-snug">
-                <span className="font-medium">{r.name}</span>
-                {r.place && <span className="text-[#6b7280]">, {r.place}</span>}
-              </span>
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
-  )
-}
 
 function Chip({
   label,
@@ -518,53 +384,46 @@ function PhotosInput({
 
 type Props = {
   open: boolean
+  // Ubicación ya elegida en el mapa vivo (LocationPicker), antes de abrir el wizard.
+  location: [number, number] | null
   onClose: () => void
-  userLocation: [number, number] | null
+  // Volver desde el primer paso (tipo) → reabrir el picker en el mapa.
+  onBack: () => void
   onSubmitDone: (id: string) => void
 }
 
 export function ReportWizard({
   open,
+  location,
   onClose,
-  userLocation,
+  onBack,
   onSubmitDone,
 }: Props) {
   const [step, setStep] = useState<Step>('type')
   const [draft, setDraft] = useState<Draft>({ type: null, location: null })
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const mapRef = useRef<LeafletMap | null>(null)
 
   useEffect(() => {
     if (open) {
-      setStep('type')
-      setDraft({ type: null, location: null })
+      setStep('type') // la ubicación ya viene del picker; aquí: tipo → detalle → contacto
+      setDraft({ type: null, location })
       setError(null)
       setSubmitting(false)
     }
-  }, [open])
-
-  // Seed location to the map center so the pin counts as a choice without panning.
-  useEffect(() => {
-    if (step === 'location' && !draft.location)
-      set('location', draft.location ?? userLocation ?? VE_QUAKE)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [step])
+  }, [open, location])
 
   if (!open) return null
 
-  const effectiveLoc = draft.location ?? userLocation
+  const effectiveLoc = draft.location ?? location
   // Teléfono opcional, pero si lo escriben debe ser un número venezolano válido.
   const contactInvalid = !!draft.contact && !isValidVePhone(draft.contact)
-  const stepNum =
-    step === 'location'
-      ? 1
-      : step === 'details'
-        ? 2
-        : step === 'contact'
-          ? 3
-          : 0
+  // Fuente/url opcional; si la escriben debe ser http(s) válida.
+  const urlInvalid = !!draft.url?.trim() && !safeUrl(draft.url)
+  // 2 pasos con barra (tipo es el selector de entrada, sin barra): detalle → contacto.
+  const stepNum = step === 'details' ? 1 : step === 'contact' ? 2 : 0
   const typeLabel = TYPE_CARDS.find((c) => c.key === draft.type)?.label ?? ''
+  const headerTitle = step === 'type' ? 'Nuevo reporte' : typeLabel
 
   const set = <K extends keyof Draft>(k: K, v: Draft[K]) =>
     setDraft((d) => ({ ...d, [k]: v }))
@@ -580,9 +439,8 @@ export function ReportWizard({
     })
 
   const back = () => {
-    if (step === 'type') onClose()
-    else if (step === 'location') setStep('type')
-    else if (step === 'details') setStep('location')
+    if (step === 'type') onBack() // volver al mapa a reelegir ubicación
+    else if (step === 'details') setStep('type')
     else setStep('details')
   }
 
@@ -590,6 +448,10 @@ export function ReportWizard({
     if (!effectiveLoc || !draft.type) return
     if (contactInvalid) {
       setError('Número de teléfono inválido')
+      return
+    }
+    if (urlInvalid) {
+      setError('Enlace inválido (usa http:// o https://)')
       return
     }
     setSubmitting(true)
@@ -601,7 +463,9 @@ export function ReportWizard({
       if (draft.accessible) meta.accessible = draft.accessible
       if (draft.missingName) meta.missingName = draft.missingName
       if (draft.age) meta.age = draft.age
-      if (draft.lastSeen) meta.lastSeen = draft.lastSeen
+      // El detalle lee "Última ubicación" desde meta.location (igual que el
+      // scraper); el wizard la guardaba en lastSeen y nunca se mostraba. Fix S1.
+      if (draft.lastSeen) meta.location = draft.lastSeen
       if (draft.dangerType) meta.dangerType = draft.dangerType
       if (draft.peopleAtRisk) meta.peopleAtRisk = draft.peopleAtRisk
       if (draft.items?.length) meta.items = draft.items
@@ -625,6 +489,7 @@ export function ReportWizard({
           description: draft.description ?? '',
           contact: draft.contact,
           meta: JSON.stringify(meta),
+          url: draft.url?.trim() || undefined,
         },
       })
 
@@ -666,7 +531,7 @@ export function ReportWizard({
             type="button"
             onClick={() => {
               setDraft((d) => ({ ...d, type: key }))
-              setStep('location')
+              setStep('details')
             }}
             className="flex flex-col items-center gap-2.5 rounded-2xl bg-[#f8f9fa] hover:bg-[#e9ecef] p-5 text-center transition-colors cursor-pointer"
           >
@@ -676,46 +541,6 @@ export function ReportWizard({
             </span>
           </button>
         ))}
-      </div>
-    </div>
-  )
-
-  const mapCenter = effectiveLoc ?? VE_QUAKE
-  const locationStep = (
-    <div className="relative h-full">
-      <MapContainer
-        ref={mapRef}
-        center={mapCenter}
-        zoom={13}
-        zoomControl={false}
-        attributionControl={false}
-        style={{ height: '100%', width: '100%' }}
-      >
-        <TileLayer
-          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-          maxZoom={19}
-        />
-        <CenterTracker onChange={(p) => set('location', p)} />
-      </MapContainer>
-
-      {/* search box — above leaflet panes (z 200–700) */}
-      <LocationSearch mapRef={mapRef} onSelect={(p) => set('location', p)} />
-
-      {/* hint pill */}
-      <div className="pointer-events-none absolute bottom-3 inset-x-4 z-[1000] flex justify-center">
-        <span className="px-3.5 py-2 rounded-full bg-black/75 text-white text-xs font-medium shadow-lg">
-          📍 Mueve el mapa para centrar el punto en la ubicación exacta
-        </span>
-      </div>
-
-      {/* fixed center pin — tip points at map center */}
-      <div className="pointer-events-none absolute left-1/2 top-1/2 z-[1000] -translate-x-1/2 -translate-y-full">
-        <MapPin
-          className="size-10 text-[#0e9c8f] drop-shadow-lg"
-          fill="#0e9c8f"
-          stroke="#fff"
-          strokeWidth={1.5}
-        />
       </div>
     </div>
   )
@@ -1048,6 +873,24 @@ export function ReportWizard({
           onChange={(e) => set('description', e.target.value)}
         />
       </Field>
+      <Field label="Fuente / enlace (opcional)">
+        <input
+          type="url"
+          inputMode="url"
+          autoComplete="url"
+          className={`w-full rounded-xl border px-4 py-3 text-sm text-[#1a1c1e] outline-none ${
+            urlInvalid ? 'border-[#d7263d]' : 'border-[#e5e7eb] focus:border-[#0e9c8f]'
+          }`}
+          placeholder="https://… (publicación, noticia)"
+          value={draft.url ?? ''}
+          onChange={(e) => set('url', e.target.value)}
+        />
+        <p className={`mt-1.5 text-xs ${urlInvalid ? 'text-[#d7263d]' : 'text-[#6b7280]'}`}>
+          {urlInvalid
+            ? 'Usa http:// o https://'
+            : 'Dónde se publicó o de dónde viene la información'}
+        </p>
+      </Field>
       {error && <p className="text-red-500 text-sm mb-2">{error}</p>}
     </div>
   )
@@ -1070,7 +913,7 @@ export function ReportWizard({
           <ChevronLeft className="size-6" />
         </button>
         <span className="flex-1 text-[17px] font-bold text-[#1a1c1e] truncate">
-          {step === 'type' ? 'Nuevo reporte' : typeLabel}
+          {headerTitle}
         </span>
         <button
           type="button"
@@ -1081,10 +924,10 @@ export function ReportWizard({
         </button>
       </div>
 
-      {/* Progress bar */}
+      {/* Progress bar — 2 pasos del form: detalle · contacto (tipo es el selector) */}
       {step !== 'type' && (
         <div className="flex gap-1.5 px-5 py-3">
-          {[1, 2, 3].map((n) => (
+          {[1, 2].map((n) => (
             <div
               key={n}
               className={`h-[3px] flex-1 rounded-full transition-colors ${stepNum >= n ? 'bg-[#0e9c8f]' : 'bg-[#e5e7eb]'}`}
@@ -1093,12 +936,9 @@ export function ReportWizard({
         </div>
       )}
 
-      {/* Content — location fills the body; other steps scroll */}
-      <div
-        className={`flex-1 min-h-0 ${step === 'location' ? '' : 'overflow-y-auto pt-4'}`}
-      >
+      {/* Content */}
+      <div className="flex-1 min-h-0 overflow-y-auto pt-4">
         {step === 'type' && typeStep}
-        {step === 'location' && locationStep}
         {step === 'details' && detailsStep}
         {step === 'contact' && contactStep}
       </div>
@@ -1112,17 +952,14 @@ export function ReportWizard({
           {step === 'contact' ? (
             <Button
               onClick={submit}
-              disabled={submitting || !effectiveLoc || contactInvalid}
+              disabled={submitting || !effectiveLoc || contactInvalid || urlInvalid}
               className="w-full h-[54px] rounded-2xl bg-[#0e9c8f] hover:bg-[#0c8a7e] text-white text-[17px] font-bold border-none"
             >
               {submitting ? 'Enviando…' : 'Enviar reporte'}
             </Button>
           ) : (
             <Button
-              onClick={() =>
-                setStep(step === 'location' ? 'details' : 'contact')
-              }
-              disabled={step === 'location' && !effectiveLoc}
+              onClick={() => setStep('contact')}
               className="w-full h-[54px] rounded-2xl bg-[#0e9c8f] hover:bg-[#0c8a7e] text-white text-[17px] font-bold border-none"
             >
               Siguiente →
