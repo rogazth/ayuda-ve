@@ -1,3 +1,4 @@
+import { env } from 'cloudflare:workers'
 import { eq } from 'drizzle-orm'
 import type { getDb } from '../db'
 import { geocache } from '../db/schema'
@@ -6,63 +7,54 @@ import { geocode as gazetteer } from './gazetteer'
 type Db = ReturnType<typeof getDb>
 export type Geo = { lat: number; lng: number; precision: string }
 
-// Resultados demasiado gruesos: un centroide de estado/país re-introduce el
-// apelotonamiento. Si Nominatim solo llega a esto, lo tratamos como no-resuelto.
-const COARSE = new Set([
-  'country',
-  'state',
-  'region',
-  'province',
-  'county',
-  'state_district',
-  'political',
-])
-
 const key = (t: string) => t.toLowerCase().replace(/\s+/g, ' ').trim()
 
-// Throttle global a ~1 req/s: política de Nominatim. Asigna slots en serie para
-// que funcione correctamente bajo concurrencia (cada caller toma el próximo slot
-// disponible antes de await, así no hay race condition).
+// Throttle global. Mapbox no tiene la regla de 1 req/s de Nominatim: el límite
+// del free tier de geocoding es ~600 req/min. 120ms entre slots ≈ 500/min, con
+// margen. Asigna slots en serie para que funcione bajo concurrencia (cada caller
+// toma el próximo slot antes de await, sin race condition).
+// ponytail: 120ms = techo seguro del free tier. Si subís de plan, bajalo.
+const SLOT_MS = 120
 let nextCallAt = 0
 async function throttle() {
   const now = Date.now()
   const slot = (nextCallAt = Math.max(nextCallAt, now))
-  nextCallAt = slot + 1100
+  nextCallAt = slot + SLOT_MS
   const wait = slot - now
   if (wait > 0) await new Promise((r) => setTimeout(r, wait))
 }
 
-async function nominatim(text: string): Promise<Geo | null> {
+// Geocoder. types= restringe a granularidad de pueblo o más fina: deja fuera
+// region/district/postcode/country, que serían un centroide de estado y re-
+// introducirían el apelotonamiento (igual política que con Nominatim).
+// Lanza ante un fallo transitorio (red/timeout/429/5xx) para que resolveGeo NO
+// cachee un miss falso. Devuelve null solo si la API respondió 200 sin resultado.
+async function mapbox(text: string): Promise<Geo | null> {
   await throttle()
   const url =
-    `https://nominatim.openstreetmap.org/search?format=jsonv2` +
-    `&countrycodes=ve&limit=1&accept-language=es&q=${encodeURIComponent(text)}`
-  try {
-    const r = await fetch(url, {
-      headers: { 'User-Agent': 'AyudaVE/0.1 (emergencia Venezuela; contacto: ayudave.com)' },
-      signal: AbortSignal.timeout(15_000),
-    })
-    if (!r.ok) return null
-    const arr = (await r.json()) as Array<{
-      lat: string
-      lon: string
-      addresstype?: string
-      type?: string
+    `https://api.mapbox.com/search/geocode/v6/forward?country=ve&limit=1` +
+    `&language=es&types=address,street,neighborhood,locality,place` +
+    `&q=${encodeURIComponent(text)}&access_token=${env.MAPBOX_TOKEN}`
+  const r = await fetch(url, { signal: AbortSignal.timeout(15_000) })
+  if (!r.ok) throw new Error(`mapbox ${r.status}`) // transitorio → no cachear miss
+  const data = (await r.json()) as {
+    features?: Array<{
+      geometry?: { coordinates?: [number, number] }
+      properties?: { feature_type?: string }
     }>
-    const hit = arr[0]
-    if (!hit) return null
-    const at = hit.addresstype ?? hit.type ?? ''
-    if (COARSE.has(at)) return null // demasiado grueso → mejor skip
-    return { lat: Number(hit.lat), lng: Number(hit.lon), precision: at || 'place' }
-  } catch {
-    return null // timeout/red: caemos al gazetteer abajo
   }
+  const hit = data.features?.[0]
+  const coords = hit?.geometry?.coordinates
+  if (!coords) return null
+  const [lng, lat] = coords
+  return { lat, lng, precision: hit?.properties?.feature_type || 'place' }
 }
 
-// Resuelve un texto libre a lat/lng. Orden: caché D1 → Nominatim → gazetteer
-// offline (red de seguridad si la API está caída). Nominatim PRIMERO a propósito:
-// "Macuto, la guaira" debe ir a Macuto, no caer al centroide de La Guaira del
-// gazetteer. Cachea también los misses para no repetir consultas.
+// Resuelve un texto libre a lat/lng. Orden: caché D1 → Mapbox → gazetteer offline
+// (red de seguridad si la API está caída). Mapbox PRIMERO a propósito: "Macuto,
+// la guaira" debe ir a Macuto, no caer al centroide de La Guaira del gazetteer.
+// Cachea también los misses para no repetir consultas — salvo si Mapbox falló de
+// forma transitoria, ahí reintenta en la próxima corrida (no quema cobertura).
 export async function resolveGeo(
   db: Db,
   place?: string,
@@ -81,21 +73,31 @@ export async function resolveGeo(
       : null
   }
 
-  let geo = await nominatim(text)
+  let geo: Geo | null = null
+  let transient = false
+  try {
+    geo = await mapbox(text)
+  } catch {
+    transient = true // API caída/throttle: no envenenamos el caché con un miss
+  }
   if (!geo) {
     // fallback offline: solo aceptamos match de ciudad (no centroide de estado)
     const gz = gazetteer(state, place)
     if (gz && gz.precision === 'city') geo = { ...gz }
   }
 
-  await db
-    .insert(geocache)
-    .values({
-      query: k,
-      lat: geo?.lat ?? null,
-      lng: geo?.lng ?? null,
-      precision: geo?.precision ?? null,
-    })
-    .onConflictDoNothing()
+  // Solo cacheamos cuando la respuesta es definitiva (Mapbox respondió, o el
+  // gazetteer resolvió). Un 429/timeout sin match offline NO se cachea: reintenta.
+  if (geo || !transient) {
+    await db
+      .insert(geocache)
+      .values({
+        query: k,
+        lat: geo?.lat ?? null,
+        lng: geo?.lng ?? null,
+        precision: geo?.precision ?? null,
+      })
+      .onConflictDoNothing()
+  }
   return geo
 }

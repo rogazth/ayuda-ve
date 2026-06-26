@@ -18,8 +18,9 @@ type SourceSummary = {
 }
 
 // Paralelismo por fuente: las fotos y el geo se solapan entre personas.
-// Nominatim sigue a 1 req/s (el throttle de geocode.ts serializa los slots),
-// pero el resto (fetch foto, R2 put, D1 writes) corre concurrentemente.
+// Mapbox va a ~500/min (el throttle de geocode.ts serializa los slots, ya no es
+// el cuello de 1 req/s de Nominatim); el resto (fetch foto, R2 put, D1 writes)
+// corre concurrentemente.
 // ponytail: 10 workers caben cómodo en el límite de 1000 subrequests/invocación.
 const CONCURRENCY = 10
 

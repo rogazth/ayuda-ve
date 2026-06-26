@@ -5,6 +5,7 @@ import type { Map as LeafletMap } from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import { Button } from '@/components/ui/button'
 import { createReport } from '../../reports/reports.functions'
+import { geoSuggest, geoRetrieve, type Suggestion } from '../../geo/geo.functions'
 import { formatVePhone, isValidVePhone, veDigits } from '../../reports/reports'
 
 type ReportType =
@@ -107,11 +108,9 @@ function CenterTracker({
   return null
 }
 
-// Geocode via OSM Nominatim, biased to Venezuela. flyTo fires moveend → CenterTracker
-// updates the pin location, so no extra wiring needed.
-// ponytail: free public Nominatim, ~1 req/s. If usage grows, self-host or swap to a keyed geocoder.
-type GeoResult = { display_name: string; lat: string; lon: string }
-
+// Autocomplete via Mapbox Search Box API (geoSuggest/geoRetrieve, server-side).
+// suggest+retrieve share a session_token so Mapbox bills them as one session;
+// it rotates after each pick. flyTo fires moveend → CenterTracker updates the pin.
 function LocationSearch({
   mapRef,
   onSelect,
@@ -120,10 +119,11 @@ function LocationSearch({
   onSelect: (p: [number, number]) => void
 }) {
   const [q, setQ] = useState('')
-  const [results, setResults] = useState<GeoResult[]>([])
+  const [results, setResults] = useState<Suggestion[]>([])
   const [loading, setLoading] = useState(false)
   const [open, setOpen] = useState(false)
   const skip = useRef(false)
+  const session = useRef(crypto.randomUUID())
 
   useEffect(() => {
     // Skip the re-search caused by pick() writing the chosen label into q.
@@ -136,36 +136,43 @@ function LocationSearch({
       setResults([])
       return
     }
-    const ctrl = new AbortController()
+    let cancelled = false
     const t = setTimeout(async () => {
       setLoading(true)
       try {
-        const res = await fetch(
-          `https://nominatim.openstreetmap.org/search?format=jsonv2&countrycodes=ve&limit=6&q=${encodeURIComponent(query)}`,
-          { signal: ctrl.signal, headers: { 'Accept-Language': 'es' } },
-        )
-        setResults(await res.json())
+        const c = mapRef.current?.getCenter()
+        const res = await geoSuggest({
+          data: {
+            q: query,
+            session: session.current,
+            proximity: c ? `${c.lng},${c.lat}` : undefined,
+          },
+        })
+        if (cancelled) return
+        setResults(res)
         setOpen(true)
       } catch {
-        /* aborted or offline — leave previous results */
+        /* offline — leave previous results */
       } finally {
-        setLoading(false)
+        if (!cancelled) setLoading(false)
       }
     }, 450)
     return () => {
-      ctrl.abort()
+      cancelled = true
       clearTimeout(t)
     }
-  }, [q])
+  }, [q, mapRef])
 
-  const pick = (r: GeoResult) => {
-    const p: [number, number] = [+r.lat, +r.lon]
-    onSelect(p) // update location immediately, don't wait for flyTo's moveend
-    mapRef.current?.flyTo(p, 16, { duration: 0.6 })
+  const pick = async (r: Suggestion) => {
     skip.current = true
-    setQ(r.display_name.split(',')[0])
+    setQ(r.name)
     setResults([])
     setOpen(false)
+    const p = await geoRetrieve({ data: { id: r.id, session: session.current } })
+    session.current = crypto.randomUUID() // retrieve cierra la sesión: rota el token
+    if (!p) return
+    onSelect(p)
+    mapRef.current?.flyTo(p, 16, { duration: 0.6 })
   }
 
   return (
@@ -195,16 +202,17 @@ function LocationSearch({
       </div>
       {open && results.length > 0 && (
         <div className="mt-1.5 bg-white rounded-xl shadow-lg max-h-64 overflow-y-auto">
-          {results.map((r, i) => (
+          {results.map((r) => (
             <button
-              key={i}
+              key={r.id}
               type="button"
               onClick={() => pick(r)}
               className="flex items-start gap-2 w-full text-left px-3 py-2.5 hover:bg-[#f3f4f6] border-b border-[#f3f4f6] last:border-0"
             >
               <MapPin className="size-4 text-[#0e9c8f] flex-shrink-0 mt-0.5" />
               <span className="text-sm text-[#1a1c1e] leading-snug">
-                {r.display_name}
+                <span className="font-medium">{r.name}</span>
+                {r.place && <span className="text-[#6b7280]">, {r.place}</span>}
               </span>
             </button>
           ))}
