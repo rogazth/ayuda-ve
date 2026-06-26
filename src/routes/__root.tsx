@@ -54,7 +54,7 @@ export const Route = createRootRoute({
           'Mapa colaborativo de reportes de emergencia en Venezuela. Reporta y consulta incidentes, sismos y alertas en tiempo real.',
       },
       { name: 'twitter:image', content: 'https://ayudave.com/og.png' },
-      { name: 'theme-color', content: '#4fb8b2' },
+      { name: 'theme-color', content: '#0e9c8f' },
       { name: 'mobile-web-app-capable', content: 'yes' },
       { name: 'apple-mobile-web-app-capable', content: 'yes' },
       { name: 'apple-mobile-web-app-title', content: 'AyudaVE' },

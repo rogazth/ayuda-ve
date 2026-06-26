@@ -3,6 +3,7 @@ import {
   BadgeCheck,
   Check,
   ChevronLeft,
+  ExternalLink,
   Flag,
   Link2,
   MessageCircle,
@@ -10,7 +11,7 @@ import {
   Phone,
   Send,
   Share2,
-  TriangleAlert,
+  Users,
   X,
 } from 'lucide-react'
 import {
@@ -83,7 +84,7 @@ function PhotoSlider({ photos }: { photos: string[] }) {
           src={photos[0]}
           alt=""
           onClick={() => setLightbox(0)}
-          className="h-[260px] w-full cursor-pointer bg-[#f3f4f6] object-cover"
+          className="h-[260px] w-full cursor-pointer bg-surface-muted object-cover"
         />
         {lightbox !== null && (
           <PhotoLightbox
@@ -110,7 +111,7 @@ function PhotoSlider({ photos }: { photos: string[] }) {
               src={src}
               alt=""
               onClick={() => setLightbox(i)}
-              className="h-full w-full flex-shrink-0 cursor-pointer snap-center bg-[#f3f4f6] object-cover"
+              className="h-full w-full flex-shrink-0 cursor-pointer snap-center bg-surface-muted object-cover"
             />
           ))}
         </div>
@@ -265,20 +266,20 @@ export function ReportDetailScreen({
     <div className="fixed inset-0 z-[900] flex flex-col bg-white">
       {/* Header — mismo chrome que el wizard */}
       <div
-        className="flex items-center gap-3 border-b border-[#f3f4f6] px-4"
+        className="flex items-center gap-3 border-b border-surface-muted px-4"
         style={{
           paddingTop: 'max(16px, env(safe-area-inset-top))',
           paddingBottom: 12,
         }}
       >
-        <span className="flex-1 truncate text-[17px] font-bold text-[#1a1c1e]">
+        <span className="flex-1 truncate text-[17px] font-bold text-ink">
           {label}
         </span>
         <button
           type="button"
           onClick={onClose}
           aria-label="Cerrar"
-          className="grid h-[34px] w-[34px] flex-none place-items-center rounded-full bg-[#f1f4f2] text-[#416166]"
+          className="grid h-[34px] w-[34px] flex-none place-items-center rounded-full bg-surface-muted text-sea-ink-soft"
         >
           <X className="size-[18px]" />
         </button>
@@ -286,7 +287,7 @@ export function ReportDetailScreen({
 
       {!report ? (
         <div className="grid flex-1 place-items-center">
-          <p className="text-[14px] text-[#737f82]">Cargando reporte…</p>
+          <p className="text-[14px] text-ink-muted">Cargando reporte…</p>
         </div>
       ) : (
         <Body
@@ -377,6 +378,10 @@ function Body({
         : t.label
   const intl = phoneIntl(report.contact)
   const showContact = canContact(type, report.contact)
+  // Fuente externa saneada (safeUrl valida http(s) y bloquea credenciales); host
+  // limpio para mostrarla dentro del badge de procedencia, comunidad o verificado.
+  const src = safeUrl(report.url)
+  const host = src ? new URL(src).host.replace(/^www\./, '') : null
 
   return (
     <>
@@ -393,7 +398,7 @@ function Body({
             >
               {headline}
             </h1>
-            <p className="mt-0.5 text-[13px] text-[#6b7280]">
+            <p className="mt-0.5 text-[13px] text-ink-muted">
               {fmtAge(report.createdAt)}
               {dist ? ` · ${dist}` : ''}
             </p>
@@ -402,7 +407,7 @@ function Body({
 
         {/* Encontrado: el reporte salió del mapa pero el link directo lo muestra así */}
         {found && (
-          <div className="mt-4 mx-5 flex items-center gap-2 rounded-2xl border border-[#bbf7d0] bg-[#f0fdf4] px-4 py-3 text-[#15803d]">
+          <div className="mt-4 mx-5 flex items-center gap-2 rounded-2xl border border-success-line bg-success-wash px-4 py-3 text-success">
             <BadgeCheck className="size-5 flex-shrink-0" />
             <span className="text-[14px] font-semibold">
               {type === 'lostpet'
@@ -418,14 +423,14 @@ function Body({
             {fields.map((f) =>
               f.chips ? (
                 <div key={f.label}>
-                  <p className="mb-1.5 text-[13px] font-semibold text-[#6b7280]">
+                  <p className="mb-1.5 text-[13px] font-semibold text-ink-muted">
                     {f.label}
                   </p>
                   <div className="flex flex-wrap gap-2">
                     {f.chips.map((c) => (
                       <span
                         key={c}
-                        className="rounded-full bg-[#f3f4f6] px-3 py-1.5 text-[13px] text-[#1a1c1e]"
+                        className="rounded-full bg-surface-muted px-3 py-1.5 text-[13px] text-ink"
                       >
                         {c}
                       </span>
@@ -435,10 +440,10 @@ function Body({
               ) : (
                 <div
                   key={f.label}
-                  className="flex justify-between gap-4 border-b border-[#f3f4f6] pb-2.5"
+                  className="flex justify-between gap-4 border-b border-surface-muted pb-2.5"
                 >
-                  <span className="text-[14px] text-[#6b7280]">{f.label}</span>
-                  <span className="text-right text-[14px] font-semibold text-[#1a1c1e]">
+                  <span className="text-[14px] text-ink-muted">{f.label}</span>
+                  <span className="text-right text-[14px] font-semibold text-ink">
                     {f.text}
                   </span>
                 </div>
@@ -448,27 +453,29 @@ function Body({
         )}
 
         {report.description.trim() && (
-          <p className="mt-5 px-5 text-[15px] leading-relaxed whitespace-pre-wrap text-[#374151]">
+          <p className="mt-5 px-5 text-[15px] leading-relaxed whitespace-pre-wrap text-ink-body">
             {report.description}
           </p>
         )}
 
-        {/* Badge de confianza: verificado si viene de entidad conocida, warning si no */}
+        {/* Procedencia: verificado (entidad/fuente confiable) o comunidad.
+            Neutro, nunca "sin verificar". La fuente, si existe, va dentro del
+            badge — en comunidad también (antes solo en verified, smell S2). */}
         <div className="mt-6 px-5">
           {report.verified ? (
-            <div className="rounded-2xl border border-[#bbf7d0] bg-[#f0fdf4] px-4 py-3">
-              <div className="flex items-center gap-2 text-[#15803d]">
+            <div className="rounded-2xl border border-success-line bg-success-wash px-4 py-3">
+              <div className="flex items-center gap-2 text-success">
                 <BadgeCheck className="size-5 flex-shrink-0" />
                 <span className="text-[13px] font-semibold">
                   Entidad verificada
                 </span>
               </div>
-              {safeUrl(report.url) && (
+              {src && (
                 <a
-                  href={safeUrl(report.url)!}
+                  href={src}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="mt-2.5 flex items-center justify-center gap-2 rounded-xl border border-[#86efac] bg-white py-2.5 text-[14px] font-semibold text-[#15803d]"
+                  className="mt-2.5 flex items-center justify-center gap-2 rounded-xl border border-success-line bg-white py-2.5 text-[14px] font-semibold text-success"
                 >
                   <Link2 className="size-4" />
                   Ver publicación original
@@ -476,11 +483,24 @@ function Body({
               )}
             </div>
           ) : (
-            <div className="flex items-start gap-2.5 rounded-2xl border border-[#fed7aa] bg-[#fff7ed] px-4 py-3">
-              <TriangleAlert className="mt-0.5 size-5 flex-shrink-0 text-[#ea580c]" />
-              <p className="text-[13px] leading-snug text-[#9a3412]">
-                Reporte de la comunidad. Confirma con fuentes oficiales antes de
-                actuar.
+            <div className="rounded-2xl border border-line bg-surface-muted px-4 py-3">
+              <p className="flex items-center gap-1.5 text-[13px] text-ink-body">
+                <Users className="size-[18px] flex-shrink-0 text-ink-muted" />
+                <span className="font-semibold">Reporte de la comunidad</span>
+                {host && (
+                  <>
+                    <span className="text-ink-faint">·</span>
+                    <a
+                      href={src!}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex min-w-0 items-center gap-1 font-semibold text-lagoon-ink"
+                    >
+                      <span className="truncate">{host}</span>
+                      <ExternalLink className="size-3.5 flex-shrink-0" />
+                    </a>
+                  </>
+                )}
               </p>
             </div>
           )}
@@ -489,8 +509,8 @@ function Body({
         {/* Confirmaciones — solo en reportes no verificados y aún activos */}
         {!report.verified && !found && (
           <div className="mt-4 px-5">
-            <div className="flex items-center justify-between rounded-2xl bg-[#f0fdf9] px-4 py-3">
-              <span className="text-[14px] text-[#173a40]">
+            <div className="flex items-center justify-between rounded-2xl bg-lagoon-wash px-4 py-3">
+              <span className="text-[14px] text-sea-ink">
                 <b className="tabular-nums">{confirms}</b>{' '}
                 {confirms === 1 ? 'persona confirma' : 'personas confirman'}
               </span>
@@ -498,7 +518,7 @@ function Body({
                 type="button"
                 onClick={onConfirm}
                 disabled={confirmed}
-                className="rounded-full bg-[#0e9c8f] px-4 py-2 text-[13px] font-bold text-white disabled:bg-[#9bd4cd]"
+                className="rounded-full bg-lagoon px-4 py-2 text-[13px] font-bold text-white disabled:bg-lagoon-disabled"
               >
                 {confirmed ? '✓ Confirmado' : 'Confirmar'}
               </button>
@@ -510,15 +530,15 @@ function Body({
             aviso se oculta del mapa (el umbral vive en appearReport). */}
         {type === 'missing' && !report.verified && !found && (
           <div className="mt-4 px-5">
-            <div className="flex items-center justify-between rounded-2xl bg-[#f0fdf4] px-4 py-3">
-              <span className="text-[14px] text-[#14532d]">
+            <div className="flex items-center justify-between rounded-2xl bg-success-wash px-4 py-3">
+              <span className="text-[14px] text-success">
                 ¿Esta persona ya apareció?
               </span>
               <button
                 type="button"
                 onClick={onAppear}
                 disabled={appeared}
-                className="rounded-full bg-[#15803d] px-4 py-2 text-[13px] font-bold text-white disabled:bg-[#a7d8b5]"
+                className="rounded-full bg-success px-4 py-2 text-[13px] font-bold text-white disabled:bg-success/45"
               >
                 {appeared ? '✓ Marcado' : 'Ya apareció'}
               </button>
@@ -532,7 +552,7 @@ function Body({
             type="button"
             onClick={onFlag}
             disabled={flagged}
-            className="inline-flex items-center gap-1.5 text-[13px] text-[#9ca3af] disabled:opacity-60"
+            className="inline-flex items-center gap-1.5 text-[13px] text-ink-faint disabled:opacity-60"
           >
             <Flag className="size-3.5" />
             {flagged ? 'Reporte enviado' : 'Reportar como falso o inapropiado'}
@@ -542,14 +562,14 @@ function Body({
 
       {/* Footer sticky: acciones por tipo */}
       <div
-        className="border-t border-[#f3f4f6] px-5 pt-3"
+        className="border-t border-surface-muted px-5 pt-3"
         style={{ paddingBottom: 'max(20px, env(safe-area-inset-bottom))' }}
       >
         {showContact && intl && (
           <div className="mb-3 flex gap-3">
             <a
               href={`tel:+${intl}`}
-              className="flex h-[52px] flex-1 items-center justify-center gap-2 rounded-2xl bg-[#e6f5f3] text-[16px] font-bold text-[#0b7d72]"
+              className="flex h-[52px] flex-1 items-center justify-center gap-2 rounded-2xl bg-lagoon-wash text-[16px] font-bold text-lagoon-ink"
             >
               <Phone className="size-5" /> Llamar
             </a>
@@ -557,7 +577,7 @@ function Body({
               href={`https://wa.me/${intl}`}
               target="_blank"
               rel="noopener noreferrer"
-              className="flex h-[52px] flex-1 items-center justify-center gap-2 rounded-2xl bg-[#e7f6ec] text-[16px] font-bold text-[#15803d]"
+              className="flex h-[52px] flex-1 items-center justify-center gap-2 rounded-2xl bg-success-wash text-[16px] font-bold text-success"
             >
               <MessageCircle className="size-5" /> WhatsApp
             </a>
@@ -568,7 +588,7 @@ function Body({
         <button
           type="button"
           onClick={onShare}
-          className="mb-3 flex h-[52px] w-full items-center justify-center gap-2 rounded-2xl bg-[#0e9c8f] text-[16px] font-bold text-white"
+          className="mb-3 flex h-[52px] w-full items-center justify-center gap-2 rounded-2xl bg-lagoon text-[16px] font-bold text-white"
         >
           <Share2 className="size-5" /> Compartir
         </button>
@@ -576,7 +596,7 @@ function Body({
           href={mapsDir(report.lat, report.lng)}
           target="_blank"
           rel="noopener noreferrer"
-          className="flex h-[52px] w-full items-center justify-center gap-2 rounded-2xl border border-[#d4dbdc] text-[16px] font-bold text-[#173a40]"
+          className="flex h-[52px] w-full items-center justify-center gap-2 rounded-2xl border border-line text-[16px] font-bold text-sea-ink"
         >
           <Navigation className="size-5" />
           {[
@@ -617,6 +637,8 @@ function ShareSheet({
   const t = encodeURIComponent(text)
 
   // Facebook ignora el texto (solo toma la URL y lee el OG del link).
+  // ponytail: los `bg` son colores de marca de cada red (identidad de terceros),
+  // no tokens de la app — quedan literales a propósito.
   const targets = [
     {
       label: 'WhatsApp',
@@ -663,10 +685,10 @@ function ShareSheet({
         onClick={(e) => e.stopPropagation()}
         className="w-full rounded-t-2xl bg-white p-5 pb-[calc(20px+env(safe-area-inset-bottom))] sm:max-w-sm sm:rounded-2xl sm:pb-5"
       >
-        <h2 className="text-[18px] font-bold text-[#1a1c1e]">
+        <h2 className="text-[18px] font-bold text-ink">
           Compartir reporte
         </h2>
-        <p className="mt-1 text-[13px] text-[#6b7280]">
+        <p className="mt-1 text-[13px] text-ink-muted">
           Difundir ayuda a que llegue a más gente.
         </p>
         <div className="mt-5 flex flex-wrap justify-center gap-x-2 gap-y-4">
@@ -689,7 +711,7 @@ function ShareSheet({
                   </span>
                 )}
               </span>
-              <span className="text-[12px] text-[#374151]">{s.label}</span>
+              <span className="text-[12px] text-ink-body">{s.label}</span>
             </a>
           ))}
           <button
@@ -697,14 +719,14 @@ function ShareSheet({
             onClick={copy}
             className="flex w-[64px] flex-col items-center gap-1.5"
           >
-            <span className="grid size-[52px] place-items-center rounded-full bg-[#f3f4f6]">
+            <span className="grid size-[52px] place-items-center rounded-full bg-surface-muted">
               {copied ? (
-                <Check className="size-6 text-[#0e9c8f]" />
+                <Check className="size-6 text-lagoon" />
               ) : (
-                <Link2 className="size-6 text-[#374151]" />
+                <Link2 className="size-6 text-ink-body" />
               )}
             </span>
-            <span className="text-[12px] text-[#374151]">
+            <span className="text-[12px] text-ink-body">
               {copied ? 'Copiado' : 'Copiar'}
             </span>
           </button>
@@ -732,10 +754,10 @@ function ConfirmDialog({
         onClick={(e) => e.stopPropagation()}
         className="w-full rounded-t-2xl bg-white p-5 pb-[calc(20px+env(safe-area-inset-bottom))] sm:max-w-sm sm:rounded-2xl sm:pb-5"
       >
-        <h2 className="text-[18px] font-bold text-[#1a1c1e]">
+        <h2 className="text-[18px] font-bold text-ink">
           ¿Confirmar este reporte?
         </h2>
-        <p className="mt-2 text-[14px] leading-relaxed text-[#6b7280]">
+        <p className="mt-2 text-[14px] leading-relaxed text-ink-muted">
           Confirma solo si viste la situación o sabes que es real. Así otros
           saben en qué pueden confiar.
         </p>
@@ -743,14 +765,14 @@ function ConfirmDialog({
           <button
             type="button"
             onClick={onCancel}
-            className="h-[48px] flex-1 rounded-2xl border border-[#e5e7eb] text-[15px] font-bold text-[#374151]"
+            className="h-[48px] flex-1 rounded-2xl border border-line text-[15px] font-bold text-ink-body"
           >
             Cancelar
           </button>
           <button
             type="button"
             onClick={onConfirm}
-            className="h-[48px] flex-1 rounded-2xl bg-[#0e9c8f] text-[15px] font-bold text-white"
+            className="h-[48px] flex-1 rounded-2xl bg-lagoon text-[15px] font-bold text-white"
           >
             Confirmar
           </button>
@@ -777,10 +799,10 @@ function AppearDialog({
         onClick={(e) => e.stopPropagation()}
         className="w-full rounded-t-2xl bg-white p-5 pb-[calc(20px+env(safe-area-inset-bottom))] sm:max-w-sm sm:rounded-2xl sm:pb-5"
       >
-        <h2 className="text-[18px] font-bold text-[#1a1c1e]">
+        <h2 className="text-[18px] font-bold text-ink">
           ¿Esta persona ya apareció?
         </h2>
-        <p className="mt-2 text-[14px] leading-relaxed text-[#6b7280]">
+        <p className="mt-2 text-[14px] leading-relaxed text-ink-muted">
           Márcalo solo si sabes que la encontraron. Cuando varias personas lo
           confirmen, el aviso se ocultará del mapa.
         </p>
@@ -788,14 +810,14 @@ function AppearDialog({
           <button
             type="button"
             onClick={onCancel}
-            className="h-[48px] flex-1 rounded-2xl border border-[#e5e7eb] text-[15px] font-bold text-[#374151]"
+            className="h-[48px] flex-1 rounded-2xl border border-line text-[15px] font-bold text-ink-body"
           >
             Cancelar
           </button>
           <button
             type="button"
             onClick={onConfirm}
-            className="h-[48px] flex-1 rounded-2xl bg-[#15803d] text-[15px] font-bold text-white"
+            className="h-[48px] flex-1 rounded-2xl bg-success text-[15px] font-bold text-white"
           >
             Ya apareció
           </button>
@@ -819,23 +841,23 @@ function FlagDialog({
     <div className="fixed inset-0 z-[960] flex flex-col bg-white sm:items-center sm:justify-center sm:bg-black/40 sm:p-4">
       <div className="flex min-h-0 w-full flex-1 flex-col bg-white sm:max-w-md sm:flex-none sm:rounded-2xl">
         <div
-          className="flex items-center gap-3 border-b border-[#f3f4f6] px-4 pb-3 sm:border-0 sm:pt-4 sm:pb-0"
+          className="flex items-center gap-3 border-b border-surface-muted px-4 pb-3 sm:border-0 sm:pt-4 sm:pb-0"
           style={{ paddingTop: 'max(16px, env(safe-area-inset-top))' }}
         >
           <button
             type="button"
             onClick={onCancel}
             aria-label="Cancelar"
-            className="-ml-1 p-1 text-[#1a1c1e] sm:hidden"
+            className="-ml-1 p-1 text-ink sm:hidden"
           >
             <ChevronLeft className="size-6" />
           </button>
-          <span className="flex-1 text-[17px] font-bold text-[#1a1c1e] sm:text-[18px]">
+          <span className="flex-1 text-[17px] font-bold text-ink sm:text-[18px]">
             Reportar aviso
           </span>
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto px-5 pt-4 sm:flex-none">
-          <p className="text-[14px] leading-relaxed text-[#6b7280]">
+          <p className="text-[14px] leading-relaxed text-ink-muted">
             Lo marcaremos para revisión. Si quieres, cuéntanos por qué: falso,
             duplicado, información peligrosa…
           </p>
@@ -845,17 +867,17 @@ function FlagDialog({
             onChange={(e) => setReason(e.target.value)}
             rows={5}
             placeholder="Motivo (opcional)"
-            className="mt-4 w-full resize-none rounded-xl border border-[#e5e7eb] px-4 py-3 text-[15px] text-[#1a1c1e] outline-none focus:border-[#0e9c8f]"
+            className="mt-4 w-full resize-none rounded-xl border border-line px-4 py-3 text-[15px] text-ink outline-none focus:border-lagoon"
           />
         </div>
         <div
-          className="border-t border-[#f3f4f6] px-5 pt-3 sm:border-0 sm:pt-2 sm:pb-4"
+          className="border-t border-surface-muted px-5 pt-3 sm:border-0 sm:pt-2 sm:pb-4"
           style={{ paddingBottom: 'max(20px, env(safe-area-inset-bottom))' }}
         >
           <button
             type="button"
             onClick={() => onSubmit(reason)}
-            className="h-[52px] w-full rounded-2xl bg-[#d7263d] text-[16px] font-bold text-white"
+            className="h-[52px] w-full rounded-2xl bg-danger text-[16px] font-bold text-white"
           >
             Enviar reporte
           </button>
