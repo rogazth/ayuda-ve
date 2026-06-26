@@ -155,6 +155,9 @@ const FRESH_NEW_MS = 2 * 60_000
 
 const DEFAULT_ZOOM = 15
 const MIN_ZOOM = 6 // ponytail: bbox ilimitado es fine — la tabla es pequeña y el índice cubre todo
+// Pedimos un área 50% mayor que el viewport: pans cortos quedan dentro del buffer
+// → sin refetch ni rebuild del cluster, el drag se siente fluido.
+const BUFFER = 0.5
 
 const VE_MAX_BOUNDS: L.LatLngBoundsExpression = [
   [VE_BOUNDS.minLat - 6, VE_BOUNDS.minLng - 6],
@@ -252,40 +255,51 @@ function MapController({
   const map = useMap()
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const reqId = useRef(0)
+  // Área (con buffer) para la que ya tenemos pines montados. Mientras el viewport
+  // quepa dentro, no re-pedimos ni reconstruimos el cluster.
+  const loaded = useRef<L.LatLngBounds | null>(null)
 
   const load = useCallback(
-    (announce: boolean) => {
+    (announce: boolean, force = false) => {
       const c = map.getCenter()
       const center: [number, number] = [c.lat, c.lng]
       if (map.getZoom() < MIN_ZOOM) {
+        loaded.current = null
         onData({ pins: [], center, tooFar: true, announce })
         return
       }
-      const b = map.getBounds()
+      const vb = map.getBounds()
+      // Viewport dentro del buffer ya cargado → solo paneamos sobre los
+      // marcadores existentes. Sin fetch ni rebuild: esto hace fluido el drag.
+      // Solo recargamos al salir del buffer (o forzado: poll / refresh).
+      if (!force && loaded.current?.contains(vb)) return
+      const area = vb.pad(BUFFER)
       const id = ++reqId.current
       fetchReportsInBounds({
         data: {
-          s: b.getSouth(),
-          n: b.getNorth(),
-          w: b.getWest(),
-          e: b.getEast(),
+          s: area.getSouth(),
+          n: area.getNorth(),
+          w: area.getWest(),
+          e: area.getEast(),
         },
       })
         .then((pins) => {
-          if (id === reqId.current) onData({ pins, center, tooFar: false, announce })
+          if (id !== reqId.current) return
+          loaded.current = area
+          onData({ pins, center, tooFar: false, announce })
         })
         .catch(() => {
-          if (id === reqId.current)
-            onData({ pins: [], center, tooFar: false, announce })
+          // Fetch falló: dejamos los pines actuales, no blanqueamos el mapa.
         })
     },
     [map, onData],
   )
 
-  // Pan/zoom: refresca pines en silencio (announce=false).
+  // Pan/zoom: refresca pines en silencio (announce=false). load() decide si toca
+  // refetch (fuera del buffer) o no hace nada (dentro).
   const schedule = useCallback(() => {
     if (timer.current) clearTimeout(timer.current)
-    timer.current = setTimeout(() => load(false), 350)
+    timer.current = setTimeout(() => load(false), 300)
   }, [load])
 
   useMapEvents({ moveend: schedule })
@@ -312,9 +326,10 @@ function MapController({
     }
   }, [])
 
-  // Poll / refresh (refreshKey): viewport quieto → announce=true para sonar.
+  // Poll / refresh (refreshKey): fuerza refetch aunque el viewport esté dentro
+  // del buffer (necesitamos datos frescos para detectar reportes nuevos → beep).
   useEffect(() => {
-    load(true)
+    load(true, true)
   }, [load, refreshKey])
 
   return null
@@ -667,10 +682,13 @@ export default function MapScreen({
         onClose={() => setWizardOpen(false)}
         userLocation={user}
         onSubmitDone={(id) => {
-            setRefreshKey((k) => k + 1)
-            toast.success('Reporte enviado', { description: 'Gracias por reportar. Tu reporte ya es visible en el mapa.' })
-            setSelectedId(id)
-          }}
+          setRefreshKey((k) => k + 1)
+          toast.success('Reporte enviado', {
+            description:
+              'Gracias por reportar. Tu reporte ya es visible en el mapa.',
+          })
+          setSelectedId(id)
+        }}
       />
 
       {infoOpen && (
