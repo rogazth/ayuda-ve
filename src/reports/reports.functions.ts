@@ -119,12 +119,11 @@ export const fetchReportsInBounds = createServerFn({ method: 'GET' })
             lte(reports.lng, e),
           ),
         )
-        .orderBy(desc(reports.createdAt))
-        // El mapa clusteriza (MarkerClusterGroup), así que miles de pines no lo
-        // matan; el bbox del viewport ya acota. ponytail: cap cliente — si
-        // zoomed-out con ~50k+ se pone lento, el upgrade es clustering
-        // server-side por tile (burbujas), no subir más este número.
-        .limit(5000)
+      // Sin cap: mostramos todos los reportes del viewport y la gente decide qué
+      // se va y qué se queda. El bbox ya acota y MarkerClusterGroup absorbe miles
+      // de pines. Sin límite, el orderBy no aporta (el cluster no respeta orden),
+      // así que también lo quitamos. ponytail: si zoomed-out con ~50k+ se pone
+      // lento, el upgrade es clustering server-side por tile, no re-poner un cap.
       return rows.map((r) => ({ ...r, createdAt: r.createdAt.getTime() }))
     })
   })
