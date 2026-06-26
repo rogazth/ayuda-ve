@@ -9,9 +9,20 @@ import {
   metaFields,
   newFreshPins,
   phoneIntl,
+  safeUrl,
   typeOf,
 } from './reports'
 import { inVenezuela } from '../quakes/quakes'
+
+test('safeUrl solo deja pasar http(s) sin credenciales', () => {
+  expect(safeUrl('https://x.com/post/1')).toBe('https://x.com/post/1')
+  expect(safeUrl('http://ok.com')).toBe('http://ok.com/')
+  expect(safeUrl('javascript:alert(1)')).toBeNull()
+  expect(safeUrl('data:text/html,<script>')).toBeNull()
+  expect(safeUrl('https://user:pass@x.com')).toBeNull()
+  expect(safeUrl('not a url')).toBeNull()
+  expect(safeUrl(null)).toBeNull()
+})
 
 test('haversine ~111 km por grado de longitud en el ecuador', () => {
   expect(haversine(0, 0, 0, 1)).toBeGreaterThan(111000)

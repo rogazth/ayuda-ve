@@ -21,6 +21,7 @@ import {
   mapsDir,
   metaFields,
   phoneIntl,
+  safeUrl,
   typeOf,
 } from '../../reports/reports'
 import {
@@ -462,9 +463,9 @@ function Body({
                   Entidad verificada
                 </span>
               </div>
-              {report.url && (
+              {safeUrl(report.url) && (
                 <a
-                  href={report.url}
+                  href={safeUrl(report.url)!}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="mt-2.5 flex items-center justify-center gap-2 rounded-xl border border-[#86efac] bg-white py-2.5 text-[14px] font-semibold text-[#15803d]"

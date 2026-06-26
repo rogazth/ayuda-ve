@@ -26,24 +26,5 @@ export const suggestContact = createServerFn({ method: 'POST' })
     await db.insert(contacts).values({ ...data, source: 'comunidad', status: 'pending' })
   })
 
-// --- Admin (sin auth aún) ---
-
-export const listPendingContacts = createServerFn({ method: 'GET' }).handler(async () => {
-  const db = getDb()
-  return db.select().from(contacts).where(eq(contacts.status, 'pending'))
-})
-
-export const moderateContact = createServerFn({ method: 'POST' })
-  .validator((p: { id: string; status: 'visible' | 'hidden' }) => {
-    if (!p.id) throw new Error('id requerido')
-    if (p.status !== 'visible' && p.status !== 'hidden')
-      throw new Error('status inválido')
-    return { id: p.id, status: p.status }
-  })
-  .handler(async ({ data }) => {
-    const db = getDb()
-    await db
-      .update(contacts)
-      .set({ status: data.status })
-      .where(and(eq(contacts.id, data.id), eq(contacts.status, 'pending')))
-  })
+// Moderación de contactos (aprobar/ocultar pendientes) = fuera de banda por SQL/
+// wrangler hasta que exista admin con auth. Sin endpoint público sin protección.

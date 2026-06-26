@@ -1,5 +1,6 @@
 import { createServerFn } from '@tanstack/react-start'
 import { getRequestHeader, getRequestIP } from '@tanstack/react-start/server'
+import { env } from 'cloudflare:workers'
 import { and, asc, desc, eq, gte, inArray, lte, ne, or, sql } from 'drizzle-orm'
 import { getDb } from '../db'
 import { comments, media, reportConfirms, reports } from '../db/schema'
@@ -8,6 +9,22 @@ import { TYPES } from './reports'
 function clientIp(): string {
   // CF-Connecting-IP en Workers; getRequestIP() en dev local
   return getRequestHeader('cf-connecting-ip') ?? getRequestIP() ?? ''
+}
+
+// Nunca persistimos la IP cruda: guardamos un SHA-256 con pepper de env. Sirve
+// igual para dedupe/self-confirm (hash==hash) pero no es PII reversible. El salt
+// vive en el secret IP_SALT (wrangler); fallback fijo solo para dev/local.
+async function clientIpHash(): Promise<string> {
+  const ip = clientIp()
+  if (!ip) return ''
+  const salt = (env as { IP_SALT?: string }).IP_SALT ?? 'ave-dev-salt'
+  const buf = await crypto.subtle.digest(
+    'SHA-256',
+    new TextEncoder().encode(salt + ip),
+  )
+  return [...new Uint8Array(buf)]
+    .map((b) => b.toString(16).padStart(2, '0'))
+    .join('')
 }
 
 function clientUa(): string {
@@ -219,16 +236,34 @@ type NewReport = {
 }
 
 export const createReport = createServerFn({ method: 'POST' })
-  .validator(
-    (d: NewReport): NewReport => ({
-      type: String(d.type),
-      lat: Number(d.lat),
-      lng: Number(d.lng),
-      description: d.description ?? '',
-      contact: d.contact,
-      meta: d.meta,
-    }),
-  )
+  .validator((d: NewReport): NewReport => {
+    const type = String(d.type)
+    if (!Object.hasOwn(TYPES, type)) throw new Error('tipo inválido')
+    const lat = Number(d.lat)
+    const lng = Number(d.lng)
+    // bbox generoso de Venezuela (+ margen): rechaza 0,0, NaN y otro continente.
+    if (
+      !Number.isFinite(lat) ||
+      !Number.isFinite(lng) ||
+      lat < -1 ||
+      lat > 16 ||
+      lng < -75 ||
+      lng > -58
+    )
+      throw new Error('coordenadas fuera de rango')
+    const description = (d.description ?? '').slice(0, 2000)
+    const contact = d.contact ? String(d.contact).slice(0, 200) : undefined
+    const meta = d.meta ? String(d.meta) : undefined
+    if (meta !== undefined) {
+      if (meta.length > 8000) throw new Error('meta demasiado grande')
+      try {
+        JSON.parse(meta) // rechaza meta corrupto antes de persistir
+      } catch {
+        throw new Error('meta inválido')
+      }
+    }
+    return { type, lat, lng, description, contact, meta }
+  })
   .handler(async ({ data }) => {
     const db = getDb()
     const [row] = await db
@@ -241,7 +276,7 @@ export const createReport = createServerFn({ method: 'POST' })
         lng: data.lng,
         contact: data.contact ?? null,
         meta: data.meta ?? null,
-        creatorIp: clientIp() || null,
+        creatorIp: (await clientIpHash()) || null,
       })
       .returning({ id: reports.id })
     return row
@@ -345,10 +380,10 @@ export const confirmReport = createServerFn({ method: 'POST' })
   .validator((d: { id: string }) => ({ id: String(d.id) }))
   .handler(async ({ data }) => {
     const db = getDb()
-    const ip = clientIp()
+    const ip = await clientIpHash()
     const ua = clientUa()
 
-    // Bloquear self-confirm: comparamos IP del creador (si se guardó)
+    // Bloquear self-confirm: comparamos hash de IP del creador (si se guardó)
     if (ip) {
       const [report] = await db
         .select({ creatorIp: reports.creatorIp })

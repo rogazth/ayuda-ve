@@ -505,6 +505,20 @@ export function mapsDir(lat: number, lng: number): string {
   return `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`
 }
 
+// Fuente externa segura para href/render: solo http(s), sin credenciales
+// embebidas. null si no parsea o usa otro protocolo (bloquea javascript:, data:).
+export function safeUrl(raw: string | null | undefined): string | null {
+  if (!raw) return null
+  try {
+    const u = new URL(raw)
+    if (u.protocol !== 'http:' && u.protocol !== 'https:') return null
+    if (u.username || u.password) return null
+    return u.toString()
+  } catch {
+    return null
+  }
+}
+
 // --- teléfono venezolano (input del wizard) ---
 // Forzado a Venezuela: el +58 es fijo en la UI, guardamos solo los 10 dígitos
 // locales. Móviles empiezan en 4, fijos en 2. [[phone-intl]]
