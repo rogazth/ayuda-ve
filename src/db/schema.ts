@@ -141,6 +141,18 @@ export const geocache = sqliteTable('geocache', {
     .default(sql`(unixepoch())`),
 })
 
+// Snapshot del feed de sismos: el cron computa desde USGS/FUNVISIS y guarda el
+// JSON aquí (fila única id=1); el load lo lee local en vez de pegar a las fuentes
+// externas en cada visita. ponytail: tabla aplicada fuera de banda (existe ya en
+// D1) — si corres db:generate, registrará su migración [[d1-migrations-drift]].
+export const quakeSnapshot = sqliteTable('quake_snapshot', {
+  id: integer('id').primaryKey(),
+  data: text('data').notNull(),
+  updatedAt: integer('updated_at', { mode: 'timestamp' })
+    .notNull()
+    .default(sql`(unixepoch())`),
+})
+
 export type Report = typeof reports.$inferSelect
 export type Comment = typeof comments.$inferSelect
 export type Contact = typeof contacts.$inferSelect
