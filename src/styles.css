@@ -27,8 +27,6 @@
   --color-chip-bg: rgba(255, 255, 255, 0.8);
   --color-chip-line: rgba(47, 106, 74, 0.18);
   --color-link-bg-hover: rgba(255, 255, 255, 0.9);
-  --color-hero-a: rgba(79, 184, 178, 0.36);
-  --color-hero-b: rgba(47, 106, 74, 0.2);
 
   /* Animaciones del mapa: keyframes como tokens de Tailwind. Se usan vía
      utilidades animate-* y se apagan con motion-reduce:animate-none. */
@@ -201,8 +199,6 @@
   --color-chip-bg: rgba(13, 28, 32, 0.9);
   --color-chip-line: rgba(141, 229, 219, 0.24);
   --color-link-bg-hover: rgba(24, 44, 49, 0.8);
-  --color-hero-a: rgba(96, 215, 207, 0.18);
-  --color-hero-b: rgba(110, 200, 154, 0.12);
 }
 
 @media (prefers-color-scheme: dark) {
@@ -224,8 +220,6 @@
     --color-chip-bg: rgba(13, 28, 32, 0.9);
     --color-chip-line: rgba(141, 229, 219, 0.24);
     --color-link-bg-hover: rgba(24, 44, 49, 0.8);
-    --color-hero-a: rgba(96, 215, 207, 0.18);
-    --color-hero-b: rgba(110, 200, 154, 0.12);
   }
 }
 
@@ -243,42 +237,43 @@ body {
   margin: 0;
   color: var(--color-sea-ink);
   font-family: var(--font-sans);
-  background-color: var(--color-bg-base);
-  background:
-    radial-gradient(1100px 620px at -8% -10%, var(--color-hero-a), transparent 58%),
-    radial-gradient(1050px 620px at 112% -12%, var(--color-hero-b), transparent 62%),
-    radial-gradient(720px 380px at 50% 115%, rgba(79, 184, 178, 0.1), transparent 68%),
-    linear-gradient(180deg, color-mix(in oklab, var(--color-sand) 68%, white) 0%, var(--color-foam) 44%, var(--color-bg-base) 100%);
+  /* Beige del MapContainer (map-screen.tsx): el primer paint y el splash usan el
+     mismo fondo que el mapa → el swap splash→mapa no hace flash de color. */
+  background-color: #ebe8e0;
   overflow-x: hidden;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
 
-body::before {
-  content: "";
-  position: fixed;
-  inset: 0;
-  pointer-events: none;
-  z-index: -1;
-  opacity: 0.28;
-  background:
-    radial-gradient(circle at 20% 15%, rgba(255, 255, 255, 0.8), transparent 34%),
-    radial-gradient(circle at 78% 26%, rgba(79, 184, 178, 0.2), transparent 42%),
-    radial-gradient(circle at 42% 82%, rgba(47, 106, 74, 0.14), transparent 36%);
+/* Splash = estado vacío del mapa: beige + retícula tenue de "tiles" y un loader
+   encima. Cuando Leaflet monta (mismo beige) los tiles entran sin corte. */
+.ave-splash {
+  background-color: #ebe8e0;
+  background-image:
+    linear-gradient(rgba(23, 58, 64, 0.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(23, 58, 64, 0.05) 1px, transparent 1px);
+  background-size: 72px 72px;
 }
 
-body::after {
-  content: "";
-  position: fixed;
-  inset: 0;
-  pointer-events: none;
-  z-index: -1;
-  opacity: 0.14;
-  background-image:
-    linear-gradient(rgba(255, 255, 255, 0.07) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255, 255, 255, 0.06) 1px, transparent 1px);
-  background-size: 28px 28px;
-  mask-image: radial-gradient(circle at 50% 30%, black, transparent 78%);
+.ave-spinner {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  border: 3px solid rgba(23, 58, 64, 0.16);
+  border-top-color: #0e9c8f;
+  animation: ave-spin 0.8s linear infinite;
+}
+
+@keyframes ave-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ave-spinner {
+    animation: none;
+  }
 }
 
 a {

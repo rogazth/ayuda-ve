@@ -6,6 +6,7 @@ import type { ReportDetail } from '../reports/reports.functions'
 import { fetchQuakes } from '../quakes/quakes.functions'
 import type { QuakeData } from '../quakes/quakes.functions'
 import type { Pin } from '../components/map/types'
+import { MapChrome } from '../components/map/map-chrome'
 import { typeOf } from '../reports/reports'
 
 type Og = { title: string; description: string; image: string }
@@ -90,23 +91,39 @@ function App() {
   const { seed, quakes } = Route.useLoaderData()
   const [ready, setReady] = useState(false)
   useEffect(() => setReady(true), [])
-  if (!ready) return <Splash />
+  if (!ready) return <Splash quakes={quakes} />
   return (
-    <Suspense fallback={<Splash />}>
+    <Suspense fallback={<Splash quakes={quakes} />}>
       <MapScreen initialPins={seed} initialQuakes={quakes} />
     </Suspense>
   )
 }
 
-function Splash() {
+const noop = () => {}
+
+// App shell: el chrome (badge + botones, con la data de quakes del SSR) se pinta
+// ya en su sitio; el único hueco que carga es el mapa (beige + retícula + spinner,
+// igual que el estado vacío del MapContainer). Cuando Leaflet monta encima, no hay
+// pop-in ni flash. Handlers inertes: la ventana de carga es de unos cientos de ms.
+function Splash({ quakes }: { quakes: QuakeData | null }) {
   return (
-    <div className="ave-splash fixed inset-0 z-0 grid place-items-center">
-      <div className="flex flex-col items-center gap-4">
+    <div className="fixed inset-0 overflow-hidden">
+      <div className="ave-splash absolute inset-0 z-0 grid place-items-center">
         <span className="ave-spinner" aria-hidden />
-        <span className="text-[14px] font-semibold text-sea-ink-soft">
-          Cargando mapa…
-        </span>
       </div>
+      <MapChrome
+        quakes={quakes}
+        satellite={false}
+        heatmap
+        outsideVE={false}
+        infoOpen={false}
+        onBanner={noop}
+        onHelp={noop}
+        onToggleSatellite={noop}
+        onToggleHeatmap={noop}
+        onRecenter={noop}
+        onReport={noop}
+      />
     </div>
   )
 }
