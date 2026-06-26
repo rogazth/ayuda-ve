@@ -116,6 +116,29 @@ export const contacts = sqliteTable('contacts', {
   ...timestamps(),
 })
 
+// Avisos verificados de ayuda (salud, conectividad, rescate, insumos, refugio,
+// transporte). Espejo de `contacts`: `source='oficial'` = lo publicamos/aprobamos
+// y es visible; `source='comunidad'` = sugerido, nace `pending`. La UI de admin
+// está fuera de scope → se aprueban fuera de banda (SQL) seteando status/moderatedAt.
+export const announcements = sqliteTable(
+  'announcements',
+  {
+    id: text('id')
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    category: text('category').notNull(), // salud | conectividad | rescate | insumos | refugio | transporte
+    title: text('title').notNull(),
+    body: text('body').notNull().default(''),
+    contact: text('contact'), // teléfono/línea, tap-to-call
+    url: text('url'), // fuente verificable
+    source: text('source').notNull(), // oficial | comunidad
+    status: text('status').notNull().default('pending'), // pending | visible | hidden
+    moderatedAt: integer('moderated_at', { mode: 'timestamp' }),
+    ...timestamps(),
+  },
+  (t) => [index('announcements_status_created').on(t.status, t.createdAt)],
+)
+
 // Buzón de sugerencias del proyecto: texto libre + contacto opcional para dar
 // seguimiento. No se muestran en el mapa; se revisan aparte (open source).
 export const suggestions = sqliteTable('suggestions', {
@@ -191,6 +214,7 @@ export type Report = typeof reports.$inferSelect
 export type Comment = typeof comments.$inferSelect
 export type ModerationEvent = typeof moderationEvents.$inferSelect
 export type Contact = typeof contacts.$inferSelect
+export type Announcement = typeof announcements.$inferSelect
 export type Suggestion = typeof suggestions.$inferSelect
 export type ReportConfirm = typeof reportConfirms.$inferSelect
 export type Media = typeof media.$inferSelect

@@ -36,6 +36,7 @@ import type { Pin, Data } from './types'
 import { MapChrome, mainAndLatest } from './map-chrome'
 import type { Tab } from './map-chrome'
 import { FeedScreen } from './feed-screen'
+import { AvisosScreen } from './avisos-screen'
 import { QuakeDrawer } from './quake-drawer'
 import { HelpDialog } from './help-dialog'
 import { AboutDialog } from './about-dialog'
@@ -395,9 +396,8 @@ const PinsLayer = memo(function PinsLayer({
   )
 })
 
-// Tabs aún sin contenido (Avisos = Fase 6, Más = Fase 8). El nav ya es el final
-// para no rehacerlo; estos paneles se rellenan en su fase. ponytail: placeholder
-// mínimo a propósito.
+// "Más" aún sin contenido (Fase 8). El nav ya es el final para no rehacerlo;
+// el panel se rellena en su fase. ponytail: placeholder mínimo a propósito.
 function TabPlaceholder({ title }: { title: string }) {
   return (
     <div className="fixed inset-0 z-[820] flex flex-col bg-surface-muted">
@@ -647,7 +647,7 @@ export default function MapScreen({
       {/* Paneles de tab: overlays sobre el mapa vivo (no desmontan Leaflet). El
           bottom-nav (en MapChrome, z-840) queda por encima. */}
       {tab === 'reportes' && <FeedScreen onSelect={setSelectedId} />}
-      {tab === 'avisos' && <TabPlaceholder title="Avisos" />}
+      {tab === 'avisos' && <AvisosScreen />}
       {tab === 'mas' && <TabPlaceholder title="Más" />}
 
       {/* Elegir ubicación sobre el mapa vivo: el chrome se oculta y aparece la
