@@ -48,6 +48,7 @@ export const reports = sqliteTable(
   },
   (t) => [
     index('reports_lat_lng').on(t.lat, t.lng), // bbox del viewport
+    index('reports_created').on(t.createdAt), // feed cronológico (orden/paginado)
     // SQLite trata NULLs como distintos, así que las filas de usuario
     // (ambos null) nunca colisionan; solo las scrapeadas comparten clave.
     uniqueIndex('reports_external').on(t.externalSource, t.externalId),

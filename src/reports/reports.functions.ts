@@ -1,7 +1,7 @@
 import { createServerFn } from '@tanstack/react-start'
 import { getRequestHeader, getRequestIP } from '@tanstack/react-start/server'
 import { env } from 'cloudflare:workers'
-import { and, asc, desc, eq, gte, inArray, lte, ne, or, sql } from 'drizzle-orm'
+import { and, asc, desc, eq, gte, inArray, lt, lte, ne, or, sql } from 'drizzle-orm'
 import { getDb } from '../db'
 import { comments, media, reportConfirms, reports } from '../db/schema'
 import { TYPES } from './reports'
@@ -40,6 +40,11 @@ const FRESH_MS = 48 * 60 * 60 * 1000
 const STANDING_TYPES = ['missing', 'lostpet'] // exentos del corte de 48h
 // Alertas de seguridad expiran en 12h — son eventos puntuales, no permanentes.
 const SECURITY_TTL_MS = 12 * 60 * 60 * 1000
+
+// URL pública de un objeto en R2. En dev el SW proxea /media/<key>; en prod sale
+// del bucket público. Una sola fuente para detalle y feed.
+const mediaUrl = (key: string) =>
+  import.meta.env.DEV ? `/media/${key}` : `https://media.ayudave.com/${key}`
 
 export type Bounds = { s: number; n: number; w: number; e: number }
 
@@ -226,6 +231,123 @@ export const fetchReportsAtPoint = createServerFn({ method: 'GET' })
     })
   })
 
+// Card del feed: payload liviano (sin meta ni todas las fotos). Solo portada +
+// conteo; el detalle (fetchReport) trae el carrusel completo al abrir.
+export type FeedItem = {
+  id: string
+  type: string
+  title: string
+  confirms: number
+  verified: boolean
+  status: string
+  createdAt: number
+  cover: string | null
+  mediaCount: number
+}
+
+type FeedQuery = { cursor?: number; types?: string[]; status?: 'visible' | 'found' }
+const FEED_LIMIT = 20
+
+// Feed cronológico paginado por cursor (createdAt). 'found' lista los reportes
+// que salieron del mapa por aparecer (chip de status); el resto = visible+fresco.
+// Cacheado por (status, tipos, cursor): páginas iguales colapsan a 1 lectura D1.
+export const fetchFeed = createServerFn({ method: 'GET' })
+  .validator((d: FeedQuery): FeedQuery => {
+    const cursor =
+      d.cursor != null && Number.isFinite(Number(d.cursor))
+        ? Number(d.cursor)
+        : undefined
+    const types = Array.isArray(d.types)
+      ? d.types
+          .map(String)
+          .filter((t) => Object.hasOwn(TYPES, t))
+          .slice(0, 20)
+      : undefined
+    const status = d.status === 'found' ? ('found' as const) : undefined
+    return { cursor, types: types?.length ? types : undefined, status }
+  })
+  .handler(async ({ data }): Promise<FeedItem[]> => {
+    const key = `feed-${data.status ?? 'v'}-${data.types?.join('.') ?? 'all'}-${data.cursor ?? 0}`
+    return edgeCached(key, 30, async () => {
+      const db = getDb()
+      const conds =
+        data.status === 'found'
+          ? [eq(reports.status, 'found')]
+          : [...visibleFreshConds()]
+      if (data.types) conds.push(inArray(reports.type, data.types))
+      if (data.cursor != null)
+        conds.push(lt(reports.createdAt, new Date(data.cursor)))
+      const rows = await db
+        .select({
+          id: reports.id,
+          type: reports.type,
+          title: reports.title,
+          confirms: reports.confirms,
+          verified: reports.verified,
+          status: reports.status,
+          createdAt: reports.createdAt,
+        })
+        .from(reports)
+        .where(and(...conds))
+        .orderBy(desc(reports.createdAt))
+        .limit(FEED_LIMIT)
+      if (!rows.length) return []
+      // Portada + conteo de una sola query a media para los ≤20 ids de la página.
+      const ids = rows.map((r) => r.id)
+      const mediaRows = await db
+        .select({ reportId: media.reportId, key: media.key, position: media.position })
+        .from(media)
+        .where(inArray(media.reportId, ids))
+      const byReport = new Map<string, { key: string; position: number }[]>()
+      for (const m of mediaRows) {
+        const arr = byReport.get(m.reportId)
+        if (arr) arr.push(m)
+        else byReport.set(m.reportId, [m])
+      }
+      return rows.map((r) => {
+        const ms = byReport.get(r.id) ?? []
+        const cover = ms.reduce<(typeof ms)[number] | null>(
+          (a, m) => (!a || m.position < a.position ? m : a),
+          null,
+        )
+        return {
+          id: r.id,
+          type: r.type,
+          title: r.title,
+          confirms: r.confirms,
+          verified: r.verified,
+          status: r.status,
+          createdAt: r.createdAt.getTime(),
+          cover: cover ? mediaUrl(cover.key) : null,
+          mediaCount: ms.length,
+        }
+      })
+    })
+  })
+
+export type TypeCounts = { counts: Record<string, number>; found: number }
+
+// Conteo por tipo para los chips (visible+fresco) + total de "Encontrados".
+// Cacheado: lo piden todos los que abren Reportes y barre toda la tabla.
+export const fetchTypeCounts = createServerFn({ method: 'GET' }).handler(
+  async (): Promise<TypeCounts> =>
+    edgeCached('type-counts-v1', 30, async () => {
+      const db = getDb()
+      const rows = await db
+        .select({ type: reports.type, n: sql<number>`count(*)` })
+        .from(reports)
+        .where(and(...visibleFreshConds()))
+        .groupBy(reports.type)
+      const counts: Record<string, number> = {}
+      for (const r of rows) counts[r.type] = Number(r.n)
+      const [found] = await db
+        .select({ n: sql<number>`count(*)` })
+        .from(reports)
+        .where(eq(reports.status, 'found'))
+      return { counts, found: Number(found.n) }
+    }),
+)
+
 type NewReport = {
   type: string
   lat: number
@@ -367,9 +489,7 @@ export const fetchReport = createServerFn({ method: 'GET' })
       meta,
       media: mediaRows.map((m) => ({
         id: m.id,
-        url: import.meta.env.DEV
-          ? `/media/${m.key}`
-          : `https://media.ayudave.com/${m.key}`,
+        url: mediaUrl(m.key),
         width: m.width,
         height: m.height,
       })),

@@ -117,8 +117,11 @@ function Splash({ quakes }: { quakes: QuakeData | null }) {
         heatmap
         outsideVE={false}
         infoOpen={false}
+        tab="mapa"
+        onTab={noop}
         onBanner={noop}
         onHelp={noop}
+        onEmergency={noop}
         onToggleSatellite={noop}
         onToggleHeatmap={noop}
         onRecenter={noop}

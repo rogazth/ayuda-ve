@@ -34,6 +34,8 @@ import {
 } from '../../quakes/quakes'
 import type { Pin, Data } from './types'
 import { MapChrome, mainAndLatest } from './map-chrome'
+import type { Tab } from './map-chrome'
+import { FeedScreen } from './feed-screen'
 import { QuakeDrawer } from './quake-drawer'
 import { HelpDialog } from './help-dialog'
 import { AboutDialog } from './about-dialog'
@@ -388,6 +390,25 @@ const PinsLayer = memo(function PinsLayer({
   )
 })
 
+// Tabs aún sin contenido (Avisos = Fase 6, Más = Fase 8). El nav ya es el final
+// para no rehacerlo; estos paneles se rellenan en su fase. ponytail: placeholder
+// mínimo a propósito.
+function TabPlaceholder({ title }: { title: string }) {
+  return (
+    <div className="fixed inset-0 z-[820] flex flex-col bg-surface-muted">
+      <header
+        className="flex-none border-b border-line bg-white"
+        style={{ paddingTop: 'max(12px, env(safe-area-inset-top))' }}
+      >
+        <h1 className="px-4 pb-3 text-[20px] font-extrabold text-ink">{title}</h1>
+      </header>
+      <div className="grid flex-1 place-items-center px-8 text-center">
+        <p className="text-[14px] text-ink-muted">Próximamente.</p>
+      </div>
+    </div>
+  )
+}
+
 export default function MapScreen({
   initialPins = [],
   initialQuakes = null,
@@ -400,6 +421,8 @@ export default function MapScreen({
   // boletín (infoOpen), "Intensidad" prende/apaga el heatmap, y "Reportar"
   // siempre disponible. Ayuda y Acerca de son dialogs aparte.
   const [infoOpen, setInfoOpen] = useState(false)
+  // Tab activo: overlay sobre el mapa montado, no una ruta. 'mapa' = sin panel.
+  const [tab, setTab] = useState<Tab>('mapa')
   const [heatmap, setHeatmap] = useState(true)
   // initialPins/initialQuakes vienen del loader SSR → pines + heatmap se pintan
   // al montar el mapa, sin esperar el round-trip. El bbox del viewport reemplaza
@@ -613,14 +636,23 @@ export default function MapScreen({
         {user && <Marker position={user} icon={youIcon} />}
       </MapContainer>
 
+      {/* Paneles de tab: overlays sobre el mapa vivo (no desmontan Leaflet). El
+          bottom-nav (en MapChrome, z-840) queda por encima. */}
+      {tab === 'reportes' && <FeedScreen onSelect={setSelectedId} />}
+      {tab === 'avisos' && <TabPlaceholder title="Avisos" />}
+      {tab === 'mas' && <TabPlaceholder title="Más" />}
+
       <MapChrome
         quakes={quakes}
         satellite={satellite}
         heatmap={heatmap}
         outsideVE={outsideVE}
         infoOpen={infoOpen}
+        tab={tab}
+        onTab={setTab}
         onBanner={() => setInfoOpen(true)}
         onHelp={() => setHelpOpen(true)}
+        onEmergency={() => setHelpOpen(true)}
         onToggleSatellite={() => setSatellite((s) => !s)}
         onToggleHeatmap={() => setHeatmap((h) => !h)}
         onRecenter={recenter}
