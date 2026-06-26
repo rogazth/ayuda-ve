@@ -16,6 +16,7 @@ import {
   fetchReport,
   fetchReportsInBounds,
 } from '../../reports/reports.functions'
+import { StackDrawer } from './stack-drawer'
 import type { ReportDetail } from '../../reports/reports.functions'
 import { reverseEstado } from '../../geo/geo.functions'
 import { fetchQuakes } from '../../quakes/quakes.functions'
@@ -194,16 +195,28 @@ function pinIcon(p: Pin) {
   return icon
 }
 
-// Icono de cluster con la marca (teal oscuro), no el skin azul por defecto de
-// markercluster — por eso solo importamos MarkerCluster.css, no el .Default.css.
-function clusterIcon(cluster: L.MarkerCluster) {
-  const n = cluster.getChildCount()
+// Burbuja teal con la marca (no el skin azul por defecto de markercluster — por
+// eso solo importamos MarkerCluster.css, no el .Default.css). La usan el cluster y
+// los puntos apilados (n>1). 'k' arriba de 999 para no romper el círculo.
+const fmtCount = (n: number) => (n > 999 ? `${(n / 1000).toFixed(1)}k` : `${n}`)
+function bubbleIcon(n: number) {
   return L.divIcon({
     className: '!bg-none !border-none',
-    html: `<div class="grid place-items-center w-[40px] h-[40px] rounded-full bg-[#173a40] text-white text-[14px] font-bold tabular-nums border-[3px] border-white [filter:drop-shadow(0_3px_6px_rgba(0,0,0,0.3))]">${n}</div>`,
+    html: `<div class="grid place-items-center w-[40px] h-[40px] rounded-full bg-[#173a40] text-white text-[13px] font-bold tabular-nums border-[3px] border-white [filter:drop-shadow(0_3px_6px_rgba(0,0,0,0.3))]">${fmtCount(n)}</div>`,
     iconSize: [40, 40],
     iconAnchor: [20, 20],
   })
+}
+
+// Suma los `n` de los hijos (cada hijo es un punto que puede apilar varios
+// reportes), no el nº de hijos: un cluster de 3 puntos con 800 c/u debe decir
+// "2.4k", no "3". PinsLayer setea `count` en cada marker apilado; los pins
+// sueltos no lo tienen → cuentan 1.
+function clusterIcon(cluster: L.MarkerCluster) {
+  let total = 0
+  for (const m of cluster.getAllChildMarkers())
+    total += (m.options as { count?: number }).count ?? 1
+  return bubbleIcon(total)
 }
 
 const youIcon = L.divIcon({
@@ -333,9 +346,11 @@ function MapController({
 const PinsLayer = memo(function PinsLayer({
   pins,
   onSelect,
+  onStack,
 }: {
   pins: Pin[]
   onSelect: (id: string) => void
+  onStack: (p: Pin) => void
 }) {
   return (
     <MarkerClusterGroup
@@ -344,14 +359,31 @@ const PinsLayer = memo(function PinsLayer({
       chunkedLoading
       iconCreateFunction={clusterIcon}
     >
-      {pins.map((p) => (
-        <Marker
-          key={p.id}
-          position={[p.lat, p.lng]}
-          icon={pinIcon(p)}
-          eventHandlers={{ click: () => onSelect(p.id) }}
-        />
-      ))}
+      {pins.map((p) => {
+        const n = p.n ?? 1
+        // Apilado: burbuja con conteo → abre el drawer (zoom no los separa, comparten
+        // coordenada). `count` en el marker para que clusterIcon sume bien.
+        if (n > 1)
+          return (
+            <Marker
+              key={p.id}
+              position={[p.lat, p.lng]}
+              icon={bubbleIcon(n)}
+              ref={(m) => {
+                if (m) (m.options as { count?: number }).count = n
+              }}
+              eventHandlers={{ click: () => onStack(p) }}
+            />
+          )
+        return (
+          <Marker
+            key={p.id}
+            position={[p.lat, p.lng]}
+            icon={pinIcon(p)}
+            eventHandlers={{ click: () => onSelect(p.id) }}
+          />
+        )
+      })}
     </MarkerClusterGroup>
   )
 })
@@ -389,6 +421,9 @@ export default function MapScreen({
   // Detalle de un reporte: id seleccionado (pin o deep-link ?r=) + fila cargada.
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [detail, setDetail] = useState<ReportDetail | null>(null)
+  // Punto apilado abierto (n>1): el drawer lista los reportes de esa coordenada.
+  // Queda montado bajo el detalle, así cerrar el detalle vuelve a la lista.
+  const [stack, setStack] = useState<Pin | null>(null)
 
   // Deep-link ?r=<id> → abre el detalle al montar (lo que comparte "Compartir").
   useEffect(() => {
@@ -417,6 +452,7 @@ export default function MapScreen({
 
   // Estable para que PinsLayer (memo) no se re-renderice por identidad del handler.
   const onSelect = useCallback((id: string) => setSelectedId(id), [])
+  const onStack = useCallback((p: Pin) => setStack(p), [])
 
   // Carga siempre-activa: el banner necesita el sismo actual aunque estés en
   // Reportes. Refresco 60s, barato por la caché de borde.
@@ -549,7 +585,7 @@ export default function MapScreen({
           }}
           refreshKey={refreshKey}
         />
-        <PinsLayer pins={pins} onSelect={onSelect} />
+        <PinsLayer pins={pins} onSelect={onSelect} onStack={onStack} />
         {quakes && (
           <>
             {heatmap && quakes.shakemap != null && (
@@ -610,6 +646,14 @@ export default function MapScreen({
           data={quakes}
           main={main}
           onClose={() => setInfoOpen(false)}
+        />
+      )}
+
+      {stack && (
+        <StackDrawer
+          point={stack}
+          onSelect={setSelectedId}
+          onClose={() => setStack(null)}
         />
       )}
 

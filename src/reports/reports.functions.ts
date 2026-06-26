@@ -107,8 +107,26 @@ export const fetchReportsInBounds = createServerFn({ method: 'GET' })
     // por created_at en vez de bajar este TTL.
     return edgeCached(key, 30, async () => {
       const db = getDb()
+      // Agregamos por coordenada: la fuente geocodifica por centroide de municipio,
+      // así que ~14k reportes caen en ~1.5k puntos (un punto de Caracas tiene 2.5k+
+      // apilados). Sin agregar mandaríamos miles de marcadores a un pixel — lag puro.
+      // GROUP BY lat,lng → un punto por coordenada con su conteo (n). Esto acota los
+      // marcadores al nº de coords distintas del viewport (≤1.5k en todo el país),
+      // no al nº de reportes: el cliente nunca lagea por más que crezca la tabla.
+      // Bare-columns con max(created_at): id/type/title salen del reporte más nuevo
+      // del punto (el representante del apilado). n>1 → el cliente pinta burbuja y
+      // abre el drawer de apilados (fetchReportsAtPoint).
       const rows = await db
-        .select(pinCols)
+        .select({
+          id: reports.id,
+          type: reports.type,
+          title: reports.title,
+          lat: reports.lat,
+          lng: reports.lng,
+          confirms: reports.confirms,
+          createdAt: sql<number>`max(${reports.createdAt})`,
+          n: sql<number>`count(*)`,
+        })
         .from(reports)
         .where(
           and(
@@ -119,12 +137,13 @@ export const fetchReportsInBounds = createServerFn({ method: 'GET' })
             lte(reports.lng, e),
           ),
         )
-      // Sin cap: mostramos todos los reportes del viewport y la gente decide qué
-      // se va y qué se queda. El bbox ya acota y MarkerClusterGroup absorbe miles
-      // de pines. Sin límite, el orderBy no aporta (el cluster no respeta orden),
-      // así que también lo quitamos. ponytail: si zoomed-out con ~50k+ se pone
-      // lento, el upgrade es clustering server-side por tile, no re-poner un cap.
-      return rows.map((r) => ({ ...r, createdAt: r.createdAt.getTime() }))
+        .groupBy(reports.lat, reports.lng)
+      // createdAt viene crudo (segundos) por el sql max(); ×1000 → ms como el resto.
+      return rows.map((r) => ({
+        ...r,
+        createdAt: Number(r.createdAt) * 1000,
+        n: Number(r.n),
+      }))
     })
   })
 
@@ -145,6 +164,50 @@ export const fetchSeedReports = createServerFn({ method: 'GET' }).handler(
       return rows.map((r) => ({ ...r, createdAt: r.createdAt.getTime() }))
     }),
 )
+
+export type StackItem = {
+  id: string
+  type: string
+  title: string
+  createdAt: number
+}
+
+// Lista de reportes apilados en una coordenada (el bbox la colapsa a un punto con
+// n). Se pide al tocar la burbuja. Columnas livianas (sin meta/fotos): el detalle
+// completo lo trae fetchReport al elegir uno. Epsilon en vez de igualdad exacta de
+// float por robustez al round-trip del double por JSON. Cacheado: un punto caliente
+// (Caracas) lo tocan muchos y la query barre miles de filas.
+export const fetchReportsAtPoint = createServerFn({ method: 'GET' })
+  .validator((d: { lat: number; lng: number }) => ({
+    lat: Number(d.lat),
+    lng: Number(d.lng),
+  }))
+  .handler(async ({ data }): Promise<StackItem[]> => {
+    const E = 1e-6
+    const key = `pt-${data.lat.toFixed(4)}_${data.lng.toFixed(4)}`
+    return edgeCached(key, 60, async () => {
+      const db = getDb()
+      const rows = await db
+        .select({
+          id: reports.id,
+          type: reports.type,
+          title: reports.title,
+          createdAt: reports.createdAt,
+        })
+        .from(reports)
+        .where(
+          and(
+            ...visibleFreshConds(),
+            gte(reports.lat, data.lat - E),
+            lte(reports.lat, data.lat + E),
+            gte(reports.lng, data.lng - E),
+            lte(reports.lng, data.lng + E),
+          ),
+        )
+        .orderBy(desc(reports.createdAt))
+      return rows.map((r) => ({ ...r, createdAt: r.createdAt.getTime() }))
+    })
+  })
 
 type NewReport = {
   type: string

@@ -6,6 +6,9 @@ export type Pin = {
   lng: number
   confirms: number
   createdAt: number
+  // nº de reportes apilados en esta coordenada (el bbox agrega por lat,lng). >1 →
+  // burbuja de apilado que abre el drawer; ausente/1 → pin normal (id/title reales).
+  n?: number
 }
 // Sin modos: el mapa muestra siempre epicentro + pines. El heatmap (intensidad)
 // y el boletín del terremoto son capas/paneles que se prenden por separado.
