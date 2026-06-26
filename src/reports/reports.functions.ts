@@ -2,7 +2,6 @@ import { createServerFn } from '@tanstack/react-start'
 import { and, asc, desc, eq, gte, inArray, lt, lte, ne, or, sql } from 'drizzle-orm'
 import { getDb } from '../db'
 import { media, reportConfirms, reports } from '../db/schema'
-import { logModeration } from '../moderation/moderation'
 import { clientIpHash, clientUa } from '../server/req'
 import { TYPES, safeUrl } from './reports'
 
@@ -218,6 +217,25 @@ export type FeedItem = {
   createdAt: number
   cover: string | null
   mediaCount: number
+  address: string | null
+}
+
+// Dirección legible para la card del feed, desde el meta del reporte (misma
+// fuente que el detalle: address > location > zone). ponytail: el meta legacy
+// puede traer fotos base64 → no parseamos blobs gigantes (createReport ya capa a
+// 8k; el guard cubre filas viejas).
+function feedAddress(metaRaw: string | null): string | null {
+  if (!metaRaw || metaRaw.length > 16000) return null
+  try {
+    const m = JSON.parse(metaRaw) as Record<string, unknown>
+    for (const k of ['address', 'location', 'zone']) {
+      const v = m[k]
+      if (typeof v === 'string' && v.trim()) return v.trim()
+    }
+  } catch {
+    /* meta corrupto: la card va sin dirección */
+  }
+  return null
 }
 
 type FeedQuery = { cursor?: number; types?: string[]; status?: 'visible' | 'found' }
@@ -261,6 +279,7 @@ export const fetchFeed = createServerFn({ method: 'GET' })
           verified: reports.verified,
           status: reports.status,
           createdAt: reports.createdAt,
+          meta: reports.meta,
         })
         .from(reports)
         .where(and(...conds))
@@ -295,6 +314,7 @@ export const fetchFeed = createServerFn({ method: 'GET' })
           createdAt: r.createdAt.getTime(),
           cover: cover ? mediaUrl(cover.key) : null,
           mediaCount: ms.length,
+          address: feedAddress(r.meta),
         }
       })
     })
@@ -531,13 +551,8 @@ export const flagReport = createServerFn({ method: 'POST' })
         status: sql`case when ${reports.flags} + 1 >= ${FLAG_HIDE} then 'hidden' else ${reports.status} end`,
       })
       .where(eq(reports.id, data.id))
-    // El motivo se audita en moderation_events (antes: comentario '[reporte] …').
-    await logModeration({
-      entityType: 'report',
-      entityId: data.id,
-      action: 'flag',
-      reason: data.reason,
-    })
+    // ponytail: auditoría en moderation_events parqueada para Etapa 2 (no hay
+    // admin UI que la lea). `reason` se sigue validando; se persistirá al wirear.
   })
 
 // "Ya apareció": solo para desaparecidos de la comunidad. Auto-oculta a los 3

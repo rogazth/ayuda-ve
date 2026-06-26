@@ -1,14 +1,15 @@
 import { useEffect, useRef, useState } from 'react'
-import type { ReactNode } from 'react'
 import {
   BadgeCheck,
   Check,
-  ChevronLeft,
   ExternalLink,
   Link2,
+  Map as MapIcon,
+  MapPin,
   MessageCircle,
   MoreHorizontal,
   Send,
+  SendHorizontal,
   Share2,
   Users,
   X,
@@ -23,27 +24,20 @@ import {
   safeUrl,
   typeOf,
 } from '../../reports/reports'
-import {
-  appearReport,
-  confirmReport,
-  flagReport,
-} from '../../reports/reports.functions'
+import { appearReport, flagReport } from '../../reports/reports.functions'
 import type { ReportDetail } from '../../reports/reports.functions'
-import {
-  addComment,
-  fetchComments,
-  flagComment,
-} from '../../comments/comments.functions'
-import type { CommentRow } from '../../comments/comments.functions'
+// Etapa 1: comentarios con datos dummy + variantes (?mock=full|empty|loading). El
+// backend de comentarios (comments.functions) queda parqueado y se wirea en E2. [[mock]]
+import { MOCK_COMMENTS, mockList, type Comment } from '../../mock'
 import { MoreActionsDrawer } from './more-actions-drawer'
 
 // Tipos cuyo CTA de mapa es "Ver ubicación" (no se va "hacia" ellos).
 const DIR_LABEL_TYPES = ['danger', 'road', 'security', 'flood', 'missing', 'lostpet']
 
-// Un voto (confirmar/flag) por reporte por dispositivo. ponytail: guard
+// Un voto (flag/aparición) por reporte por dispositivo. ponytail: guard
 // client-side sin auth — suficiente para MVP; subir a rate-limit por IP si hay
-// manipulación. 'c' = confirmado, 'f' = reportado, 'a' = "ya apareció".
-type Vote = { c?: boolean; f?: boolean; a?: boolean }
+// manipulación. 'f' = reportado, 'a' = "ya apareció".
+type Vote = { f?: boolean; a?: boolean }
 function votes(): Record<string, Vote> {
   try {
     return JSON.parse(localStorage.getItem('ave-voted') ?? '{}')
@@ -61,22 +55,31 @@ function addVote(id: string, k: keyof Vote) {
   }
 }
 
-// Comentarios ya reportados por este dispositivo (guard anti-doble-flag).
-function cflags(): Record<string, boolean> {
-  try {
-    return JSON.parse(localStorage.getItem('ave-cflag') ?? '{}')
-  } catch {
-    return {}
-  }
+// Nombre específico (desaparecido/mascota) o null. Lo usan el header, el cuerpo
+// y el texto de compartir → una sola fuente.
+function reportName(report: {
+  type: string
+  meta: Record<string, unknown>
+}): string | null {
+  if (
+    report.type === 'missing' &&
+    typeof report.meta.missingName === 'string' &&
+    report.meta.missingName.trim()
+  )
+    return report.meta.missingName.trim()
+  if (
+    report.type === 'lostpet' &&
+    typeof report.meta.petName === 'string' &&
+    report.meta.petName.trim()
+  )
+    return report.meta.petName.trim()
+  return null
 }
-function addCflag(id: string) {
-  const v = cflags()
-  v[id] = true
-  try {
-    localStorage.setItem('ave-cflag', JSON.stringify(v))
-  } catch {
-    /* idem: el guard no persiste, no es crítico */
-  }
+
+// Texto de compartir: pedido con nombre si lo hay; si no, el tipo.
+function shareText(report: ReportDetail): string {
+  const nm = reportName(report)
+  return nm ? `Ayúdanos a encontrar a ${nm}` : typeOf(report.type).label
 }
 
 // Marca circular con el color + ícono del tipo (mismo lenguaje que el pin).
@@ -106,12 +109,14 @@ function PhotoSlider({ photos }: { photos: string[] }) {
   if (photos.length < 2)
     return (
       <>
-        <img
-          src={photos[0]}
-          alt=""
-          onClick={() => setLightbox(0)}
-          className="h-[260px] w-full cursor-pointer bg-surface-muted object-cover"
-        />
+        <div className="px-4 pt-3.5">
+          <img
+            src={photos[0]}
+            alt=""
+            onClick={() => setLightbox(0)}
+            className="h-[200px] w-full cursor-pointer rounded-2xl bg-surface-muted object-cover"
+          />
+        </div>
         {lightbox !== null && (
           <PhotoLightbox
             photos={photos}
@@ -123,31 +128,33 @@ function PhotoSlider({ photos }: { photos: string[] }) {
     )
   return (
     <>
-      <div className="relative">
-        <div
-          onScroll={(e) => {
-            const el = e.currentTarget
-            setActive(Math.round(el.scrollLeft / el.clientWidth))
-          }}
-          className="flex h-[260px] w-full snap-x snap-mandatory overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
-        >
-          {photos.map((src, i) => (
-            <img
-              key={i}
-              src={src}
-              alt=""
-              onClick={() => setLightbox(i)}
-              className="h-full w-full flex-shrink-0 cursor-pointer snap-center bg-surface-muted object-cover"
-            />
-          ))}
-        </div>
-        <div className="absolute bottom-2.5 left-1/2 flex -translate-x-1/2 gap-1.5 [filter:drop-shadow(0_1px_2px_rgba(0,0,0,0.45))]">
-          {photos.map((_, i) => (
-            <span
-              key={i}
-              className={`h-1.5 rounded-full transition-all ${i === active ? 'w-4 bg-white' : 'w-1.5 bg-white/60'}`}
-            />
-          ))}
+      <div className="px-4 pt-3.5">
+        <div className="relative overflow-hidden rounded-2xl">
+          <div
+            onScroll={(e) => {
+              const el = e.currentTarget
+              setActive(Math.round(el.scrollLeft / el.clientWidth))
+            }}
+            className="flex h-[200px] w-full snap-x snap-mandatory overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+          >
+            {photos.map((src, i) => (
+              <img
+                key={i}
+                src={src}
+                alt=""
+                onClick={() => setLightbox(i)}
+                className="h-full w-full flex-shrink-0 cursor-pointer snap-center bg-surface-muted object-cover"
+              />
+            ))}
+          </div>
+          <div className="absolute bottom-2.5 left-1/2 flex -translate-x-1/2 gap-1.5 [filter:drop-shadow(0_1px_2px_rgba(0,0,0,0.45))]">
+            {photos.map((_, i) => (
+              <span
+                key={i}
+                className={`h-1.5 rounded-full transition-all ${i === active ? 'w-4 bg-white' : 'w-1.5 bg-white/60'}`}
+              />
+            ))}
+          </div>
         </div>
       </div>
       {lightbox !== null && (
@@ -238,17 +245,16 @@ export function ReportDetailScreen({
   report,
   user,
   onClose,
+  onViewOnMap,
 }: {
   report: ReportDetail | null
   user: [number, number] | null
   onClose: () => void
+  onViewOnMap: (lat: number, lng: number) => void
 }) {
-  const [confirmed, setConfirmed] = useState(false)
   const [flagged, setFlagged] = useState(false)
   const [appeared, setAppeared] = useState(false)
-  const [bump, setBump] = useState(0) // confirmaciones extra optimistas
   const [shareOpen, setShareOpen] = useState(false)
-  const [confirmOpen, setConfirmOpen] = useState(false)
   const [flagOpen, setFlagOpen] = useState(false)
   const [appearOpen, setAppearOpen] = useState(false)
   const [moreOpen, setMoreOpen] = useState(false)
@@ -257,19 +263,9 @@ export function ReportDetailScreen({
   useEffect(() => {
     if (!report) return
     const v = votes()[report.id] as Vote | undefined
-    setConfirmed(!!v?.c)
     setFlagged(!!v?.f)
     setAppeared(!!v?.a)
-    setBump(0)
   }, [report?.id])
-
-  const doConfirm = () => {
-    if (!report || confirmed) return
-    setConfirmed(true)
-    setBump(1)
-    addVote(report.id, 'c')
-    confirmReport({ data: { id: report.id } }).catch(() => {})
-  }
 
   const doFlag = (reason: string) => {
     if (!report || flagged) return
@@ -287,11 +283,48 @@ export function ReportDetailScreen({
     appearReport({ data: { id: report.id } }).catch(() => {})
   }
 
-  const label = report ? typeOf(report.type).label : 'Reporte'
+  // Compartir: en móvil (Android/iOS) la hoja nativa del SO es lo más familiar
+  // —sobre todo para personas mayores— y manda a WhatsApp/todo. Sin `share`
+  // (escritorio) caemos a la hoja con botones de marca. [[share]]
+  const doShare = async () => {
+    if (!report) return
+    if (typeof navigator !== 'undefined' && navigator.share) {
+      try {
+        await navigator.share({
+          title: shareText(report),
+          text: shareText(report),
+          url: `${location.origin}/?r=${report.id}`,
+        })
+      } catch {
+        /* el usuario canceló la hoja nativa: no abrimos la de respaldo */
+      }
+      return
+    }
+    setShareOpen(true)
+  }
+
+  // Header: un pill de estado con prioridad Encontrado > Verificado > Comunidad.
+  // Le da sentido al header (antes casi vacío) y libera el cuerpo: la procedencia
+  // ya no se repite abajo, solo queda el bloque de Fuente si hay enlace. [[report-detail]]
+  const status = !report
+    ? null
+    : report.status === 'found'
+      ? { label: 'Encontrado', Icon: BadgeCheck, cls: 'bg-success text-white' }
+      : report.verified
+        ? {
+            label: 'Verificado',
+            Icon: BadgeCheck,
+            cls: 'border border-success-line bg-success-wash text-success',
+          }
+        : {
+            label: 'Reporte de la comunidad',
+            Icon: Users,
+            cls: 'border border-line bg-surface-muted text-ink-body',
+          }
 
   return (
-    <div className="fixed inset-0 z-[900] flex flex-col bg-white">
-      {/* Header — mismo chrome que el wizard */}
+    <div className="fixed inset-0 z-[900] flex flex-col bg-white animate-dialog-slide motion-reduce:animate-none">
+      {/* Header — pill de estado + cerrar a la derecha (alcanzable con el pulgar). */}
       <div
         className="flex items-center gap-3 border-b border-surface-muted px-4"
         style={{
@@ -299,8 +332,14 @@ export function ReportDetailScreen({
           paddingBottom: 12,
         }}
       >
-        <span className="flex-1 truncate text-[17px] font-bold text-ink">
-          {label}
+        <span className="flex-1">
+          {status && (
+            <span
+              className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-[13px] font-bold ${status.cls}`}
+            >
+              <status.Icon className="size-[15px]" /> {status.label}
+            </span>
+          )}
         </span>
         <button
           type="button"
@@ -320,13 +359,11 @@ export function ReportDetailScreen({
         <Body
           report={report}
           user={user}
-          confirmed={confirmed}
           appeared={appeared}
-          confirms={report.confirms + bump}
-          onConfirm={() => setConfirmOpen(true)}
           onAppear={() => setAppearOpen(true)}
-          onShare={() => setShareOpen(true)}
+          onShare={doShare}
           onMore={() => setMoreOpen(true)}
+          onViewOnMap={onViewOnMap}
         />
       )}
 
@@ -349,15 +386,6 @@ export function ReportDetailScreen({
         />
       )}
 
-      {confirmOpen && (
-        <ConfirmDialog
-          onCancel={() => setConfirmOpen(false)}
-          onConfirm={() => {
-            doConfirm()
-            setConfirmOpen(false)
-          }}
-        />
-      )}
       {flagOpen && (
         <FlagDialog
           onCancel={() => setFlagOpen(false)}
@@ -383,27 +411,21 @@ export function ReportDetailScreen({
 function Body({
   report,
   user,
-  confirmed,
   appeared,
-  confirms,
-  onConfirm,
   onAppear,
   onShare,
   onMore,
+  onViewOnMap,
 }: {
   report: ReportDetail
   user: [number, number] | null
-  confirmed: boolean
   appeared: boolean
-  confirms: number
-  onConfirm: () => void
   onAppear: () => void
   onShare: () => void
   onMore: () => void
+  onViewOnMap: (lat: number, lng: number) => void
 }) {
   const { type, meta } = report
-  const commentsRef = useRef<HTMLDivElement>(null)
-  const [commentCount, setCommentCount] = useState(0)
   const found = report.status === 'found'
   const t = typeOf(type)
   const photos = report.media.map((m) => m.url)
@@ -411,23 +433,27 @@ function Body({
   const dist = user
     ? fmtDist(haversine(user[0], user[1], report.lat, report.lng))
     : null
-  const headline =
-    type === 'missing' && meta.missingName
-      ? String(meta.missingName)
-      : type === 'lostpet' && meta.petName
-        ? String(meta.petName)
-        : t.label
+  // Título del cuerpo: nombre específico si lo hay; si no, el tipo (acá el header
+  // queda sin título, así el tipo aparece una sola vez).
+  const headline = reportName(report) ?? t.label
   // Fuente externa saneada (safeUrl valida http(s) y bloquea credenciales); host
   // limpio para mostrarla dentro del badge de procedencia, comunidad o verificado.
   const src = safeUrl(report.url)
   const host = src ? new URL(src).host.replace(/^www\./, '') : null
+  // Línea de dirección legible si el meta la trae; si no, etiqueta genérica. El
+  // botón siempre lleva al mapa (todo reporte tiene lat/lng).
+  const addrLine =
+    (typeof meta.address === 'string' && meta.address.trim()) ||
+    (typeof meta.location === 'string' && meta.location.trim()) ||
+    null
+  const addrSub = typeof meta.zone === 'string' ? meta.zone.trim() || null : null
 
   return (
     <>
       <div className="min-h-0 flex-1 overflow-y-auto">
         {photos.length > 0 && <PhotoSlider photos={photos} />}
 
-        {/* Identidad: marca del tipo + título específico + cuándo/dónde */}
+        {/* Identidad: marca del tipo + título (nombre o tipo) + cuándo/dónde */}
         <div className="flex items-center gap-3 px-5 pt-4">
           <TypeMark type={type} />
           <div className="min-w-0">
@@ -444,50 +470,24 @@ function Body({
           </div>
         </div>
 
-        {/* Encontrado: el reporte salió del mapa pero el link directo lo muestra así */}
-        {found && (
-          <div className="mt-4 mx-5 flex items-center gap-2 rounded-2xl border border-success-line bg-success-wash px-4 py-3 text-success">
-            <BadgeCheck className="size-5 flex-shrink-0" />
-            <span className="text-[14px] font-semibold">
-              {type === 'lostpet'
-                ? '🐾 Esta mascota fue encontrada'
-                : 'Esta persona fue localizada'}
-            </span>
-          </div>
-        )}
-
-        {/* Meta por tipo */}
+        {/* Meta por tipo — cajas kv del POC (label arriba, valor abajo). Todas
+            iguales: las listas (p. ej. "Necesita") van como valor unido, no como
+            un bloque aparte de chips. */}
         {fields.length > 0 && (
-          <div className="mt-5 space-y-3 px-5">
-            {fields.map((f) =>
-              f.chips ? (
-                <div key={f.label}>
-                  <p className="mb-1.5 text-[13px] font-semibold text-ink-muted">
-                    {f.label}
-                  </p>
-                  <div className="flex flex-wrap gap-2">
-                    {f.chips.map((c) => (
-                      <span
-                        key={c}
-                        className="rounded-full bg-surface-muted px-3 py-1.5 text-[13px] text-ink"
-                      >
-                        {c}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              ) : (
-                <div
-                  key={f.label}
-                  className="flex justify-between gap-4 border-b border-surface-muted pb-2.5"
-                >
-                  <span className="text-[14px] text-ink-muted">{f.label}</span>
-                  <span className="text-right text-[14px] font-semibold text-ink">
-                    {f.text}
-                  </span>
-                </div>
-              ),
-            )}
+          <div className="mt-4 flex flex-wrap gap-2 px-5">
+            {fields.map((f) => (
+              <div
+                key={f.label}
+                className="rounded-lg border border-line bg-surface-muted px-3 py-2"
+              >
+                <p className="text-[11px] font-semibold tracking-[0.03em] text-ink-muted uppercase">
+                  {f.label}
+                </p>
+                <p className="mt-0.5 text-[14px] font-semibold text-ink">
+                  {f.chips ? f.chips.join(', ') : f.text}
+                </p>
+              </div>
+            ))}
           </div>
         )}
 
@@ -497,53 +497,56 @@ function Body({
           </p>
         )}
 
-        {/* Procedencia: verificado (entidad/fuente confiable) o comunidad.
-            Neutro, nunca "sin verificar". La fuente, si existe, va dentro del
-            badge — en comunidad también (antes solo en verified, smell S2). */}
-        <div className="mt-6 px-5">
-          {report.verified ? (
-            <div className="rounded-2xl border border-success-line bg-success-wash px-4 py-3">
-              <div className="flex items-center gap-2 text-success">
-                <BadgeCheck className="size-5 flex-shrink-0" />
-                <span className="text-[13px] font-semibold">
-                  Entidad verificada
+        {/* Ubicación + "Ver en mapa" (POC). Todo reporte tiene lat/lng → centra
+            el mapa vivo y cierra el detalle. */}
+        <div className="mt-5 px-5">
+          <button
+            type="button"
+            onClick={() => onViewOnMap(report.lat, report.lng)}
+            className="flex w-full items-center gap-3 rounded-2xl border border-line bg-surface-muted px-3.5 py-3 text-left"
+          >
+            <MapPin className="size-5 flex-none text-lagoon-ink" />
+            <span className="min-w-0 flex-1">
+              <span className="block truncate text-[14px] font-bold text-ink">
+                {addrLine || 'Ubicación del reporte'}
+              </span>
+              {addrSub && (
+                <span className="block truncate text-[12px] text-ink-muted">
+                  {addrSub}
                 </span>
-              </div>
-              {src && (
-                <a
-                  href={src}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="mt-2.5 flex items-center justify-center gap-2 rounded-xl border border-success-line bg-white py-2.5 text-[14px] font-semibold text-success"
-                >
-                  <Link2 className="size-4" />
-                  Ver publicación original
-                </a>
               )}
-            </div>
-          ) : (
-            <div className="rounded-2xl border border-line bg-surface-muted px-4 py-3">
-              <p className="flex items-center gap-1.5 text-[13px] text-ink-body">
-                <Users className="size-[18px] flex-shrink-0 text-ink-muted" />
-                <span className="font-semibold">Reporte de la comunidad</span>
-                {host && (
-                  <>
-                    <span className="text-ink-faint">·</span>
-                    <a
-                      href={src!}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex min-w-0 items-center gap-1 font-semibold text-lagoon-ink"
-                    >
-                      <span className="truncate">{host}</span>
-                      <ExternalLink className="size-3.5 flex-shrink-0" />
-                    </a>
-                  </>
-                )}
-              </p>
-            </div>
-          )}
+            </span>
+            <span className="flex flex-none flex-col items-center gap-0.5 text-lagoon-ink">
+              <MapIcon className="size-5" />
+              <span className="text-[11px] font-bold">Ver en mapa</span>
+            </span>
+          </button>
         </div>
+
+        {/* Fuente: bloque único que aparece solo si el reporte trae enlace de
+            origen (igual para verificado y comunidad). La procedencia vive ahora
+            en el pill del header. [[report-detail]] */}
+        {src && (
+          <div className="mt-6 px-5">
+            <a
+              href={src}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-3 rounded-2xl border border-line bg-surface-muted px-3.5 py-3"
+            >
+              <Link2 className="size-5 flex-none text-lagoon-ink" />
+              <span className="min-w-0 flex-1">
+                <span className="block text-[11px] font-semibold tracking-[0.03em] text-ink-muted uppercase">
+                  Fuente
+                </span>
+                <span className="block truncate text-[14px] font-bold text-ink">
+                  {host}
+                </span>
+              </span>
+              <ExternalLink className="size-[18px] flex-none text-lagoon-ink" />
+            </a>
+          </div>
+        )}
 
         {/* "Ya apareció" — solo desaparecidos de la comunidad. A los 3 votos el
             aviso se oculta del mapa (el umbral vive en appearReport). */}
@@ -566,48 +569,32 @@ function Body({
         )}
 
         {/* Comentarios de la comunidad */}
-        <div ref={commentsRef} className="mt-6 px-5 pb-2">
-          <CommentsSection reportId={report.id} onCount={setCommentCount} />
+        <div className="mt-6 px-5 pb-2">
+          <CommentsSection reportId={report.id} />
         </div>
       </div>
 
-      {/* Footer SOSAFE: Lo confirmo · Comentarios · Compartir · Más. Las acciones
-          de contacto (Llamar/WhatsApp/Cómo llegar) y Reportar viven en el "Más". */}
+      {/* Footer: Compartir (acción primaria — difundir es el punto) + Opciones
+          (Cómo llegar / Llamar / WhatsApp / Reportar). Los comentarios viven en el
+          cuerpo; "Ya apareció" también. */}
       <div
-        className="flex border-t border-surface-muted px-2 pt-1.5"
+        className="flex gap-2.5 border-t border-surface-muted px-4 pt-3"
         style={{ paddingBottom: 'max(12px, env(safe-area-inset-bottom))' }}
       >
-        {!report.verified && !found && (
-          <FooterAction
-            icon={<Check className="size-[22px]" />}
-            label={confirmed ? 'Confirmado' : 'Lo confirmo'}
-            count={confirms}
-            active={confirmed}
-            disabled={confirmed}
-            onClick={onConfirm}
-          />
-        )}
-        <FooterAction
-          icon={<MessageCircle className="size-[22px]" />}
-          label="Comentarios"
-          count={commentCount}
-          onClick={() =>
-            commentsRef.current?.scrollIntoView({
-              behavior: 'smooth',
-              block: 'start',
-            })
-          }
-        />
-        <FooterAction
-          icon={<Share2 className="size-[22px]" />}
-          label="Compartir"
+        <button
+          type="button"
           onClick={onShare}
-        />
-        <FooterAction
-          icon={<MoreHorizontal className="size-[22px]" />}
-          label="Más"
+          className="flex h-[50px] flex-1 items-center justify-center gap-2 rounded-2xl bg-lagoon text-[16px] font-bold text-white"
+        >
+          <Share2 className="size-[20px]" /> Compartir
+        </button>
+        <button
+          type="button"
           onClick={onMore}
-        />
+          className="flex h-[50px] flex-none items-center justify-center gap-2 rounded-2xl border border-line px-5 text-[15px] font-bold text-ink-body"
+        >
+          <MoreHorizontal className="size-[20px]" /> Opciones
+        </button>
       </div>
     </>
   )
@@ -625,12 +612,7 @@ function ShareSheet({
 }) {
   const [copied, setCopied] = useState(false)
   const url = `${location.origin}/?r=${report.id}`
-  const text =
-    report.type === 'missing' && typeof report.meta.missingName === 'string'
-      ? `Ayúdanos a encontrar a ${report.meta.missingName}`
-      : report.type === 'lostpet' && typeof report.meta.petName === 'string'
-        ? `Ayúdanos a encontrar a ${report.meta.petName}`
-        : typeOf(report.type).label
+  const text = shareText(report)
   const u = encodeURIComponent(url)
   const t = encodeURIComponent(text)
 
@@ -734,50 +716,6 @@ function ShareSheet({
   )
 }
 
-// Confirmar = afirmar que el reporte es real → pedimos intención explícita.
-// Bottom-sheet en mobile, card centrada en desktop.
-function ConfirmDialog({
-  onCancel,
-  onConfirm,
-}: {
-  onCancel: () => void
-  onConfirm: () => void
-}) {
-  return (
-    <div
-      className="fixed inset-0 z-[960] flex items-end justify-center bg-black/40 sm:items-center sm:p-4"
-      onClick={onCancel}
-    >
-      <div
-        onClick={(e) => e.stopPropagation()}
-        className="w-full rounded-t-2xl bg-white p-5 pb-[calc(20px+env(safe-area-inset-bottom))] sm:max-w-sm sm:rounded-2xl sm:pb-5"
-      >
-        <h2 className="text-[18px] font-bold text-ink">¿Lo confirmas?</h2>
-        <p className="mt-2 text-[14px] leading-relaxed text-ink-muted">
-          Confírmalo solo si viste la situación o sabes que es real. Así otros
-          saben en qué pueden confiar.
-        </p>
-        <div className="mt-5 flex gap-3">
-          <button
-            type="button"
-            onClick={onCancel}
-            className="h-[48px] flex-1 rounded-2xl border border-line text-[15px] font-bold text-ink-body"
-          >
-            Cancelar
-          </button>
-          <button
-            type="button"
-            onClick={onConfirm}
-            className="h-[48px] flex-1 rounded-2xl bg-lagoon text-[15px] font-bold text-white"
-          >
-            Lo confirmo
-          </button>
-        </div>
-      </div>
-    </div>
-  )
-}
-
 // "Ya apareció": ocultar el aviso es sensible, así que pedimos intención explícita.
 function AppearDialog({
   onCancel,
@@ -824,7 +762,8 @@ function AppearDialog({
 }
 
 // Reportar abuso con motivo opcional. Full-screen en mobile (espacio para teclado),
-// card en desktop. El motivo se audita en moderation_events (flagReport).
+// card en desktop. El motivo se valida server-side; la auditoría en
+// moderation_events se wirea en Etapa 2 (hoy flagReport solo incrementa/oculta).
 function FlagDialog({
   onCancel,
   onSubmit,
@@ -840,17 +779,17 @@ function FlagDialog({
           className="flex items-center gap-3 border-b border-surface-muted px-4 pb-3 sm:border-0 sm:pt-4 sm:pb-0"
           style={{ paddingTop: 'max(16px, env(safe-area-inset-top))' }}
         >
-          <button
-            type="button"
-            onClick={onCancel}
-            aria-label="Cancelar"
-            className="-ml-1 p-1 text-ink sm:hidden"
-          >
-            <ChevronLeft className="size-6" />
-          </button>
           <span className="flex-1 text-[17px] font-bold text-ink sm:text-[18px]">
             Reportar aviso
           </span>
+          <button
+            type="button"
+            onClick={onCancel}
+            aria-label="Cerrar"
+            className="grid size-[34px] flex-none place-items-center rounded-full bg-surface-muted text-sea-ink-soft"
+          >
+            <X className="size-[18px]" />
+          </button>
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto px-5 pt-4 sm:flex-none">
           <p className="text-[14px] leading-relaxed text-ink-muted">
@@ -883,125 +822,45 @@ function FlagDialog({
   )
 }
 
-// Acción del footer SOSAFE: ícono + label, con badge de conteo opcional. `active`
-// = la acción ya ejecutada (Confirmado) → color de marca.
-function FooterAction({
-  icon,
-  label,
-  count,
-  active,
-  disabled,
-  onClick,
-}: {
-  icon: ReactNode
-  label: string
-  count?: number
-  active?: boolean
-  disabled?: boolean
-  onClick: () => void
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={disabled}
-      className={`flex flex-1 flex-col items-center gap-1 rounded-xl py-1.5 ${
-        active ? 'text-lagoon' : 'text-sea-ink-soft'
-      }`}
-    >
-      <span className="relative">
-        {icon}
-        {count != null && count > 0 && (
-          <span className="absolute -top-1.5 -right-2.5 min-w-[16px] rounded-full bg-lagoon px-1 text-center text-[10px] leading-[16px] font-bold text-white tabular-nums">
-            {count > 99 ? '99+' : count}
-          </span>
-        )}
-      </span>
-      <span className="text-[11px] font-semibold leading-none">{label}</span>
-    </button>
-  )
-}
-
-// Comentarios de la comunidad: lista + composer. Auto-publican; cada uno se puede
-// reportar (su "⋯" → flagComment, oculto a los 5 flags server-side). El nombre es
-// libre/opcional; React escapa el texto al render (no es HTML).
-function CommentsSection({
-  reportId,
-  onCount,
-}: {
-  reportId: string
-  onCount: (n: number) => void
-}) {
-  const [list, setList] = useState<CommentRow[]>([])
-  const [loading, setLoading] = useState(true)
+// Comentarios de la comunidad: lista + composer. Etapa 1: datos dummy en memoria
+// (el composer agrega local, reportar marca local). addComment/flagComment se
+// wirean en Etapa 2. El nombre es libre/opcional; React escapa el texto al render.
+function CommentsSection({ reportId }: { reportId: string }) {
+  const [{ items, loading }] = useState(() => mockList(MOCK_COMMENTS))
+  const [list, setList] = useState<Comment[]>(items)
   const [text, setText] = useState('')
   const [name, setName] = useState('')
-  const [sending, setSending] = useState(false)
-  const [err, setErr] = useState<string | null>(null)
   const [flagged, setFlagged] = useState<Record<string, boolean>>({})
 
-  useEffect(() => {
-    let alive = true
-    setLoading(true)
-    fetchComments({ data: { reportId } })
-      .then((rows) => {
-        if (!alive) return
-        setList(rows)
-        setFlagged(cflags())
-      })
-      .catch(() => {})
-      .finally(() => {
-        if (alive) setLoading(false)
-      })
-    return () => {
-      alive = false
-    }
-  }, [reportId])
-
-  // Reporta el conteo al footer tras el commit (no durante el render del padre).
-  useEffect(() => {
-    onCount(list.length)
-  }, [list.length, onCount])
-
-  const submit = async () => {
+  const submit = () => {
     const t = text.trim()
-    if (!t || sending) return
-    setSending(true)
-    setErr(null)
-    try {
-      const res = await addComment({
-        data: { reportId, text: t, authorName: name.trim() || undefined },
-      })
-      if (res.ok) {
-        setList((l) => [res.comment, ...l])
-        setText('')
-      } else {
-        setErr(
-          res.reason === 'rate'
-            ? 'Espera unos segundos antes de comentar de nuevo.'
-            : res.reason === 'missing'
-              ? 'Este reporte ya no está disponible.'
-              : 'Escribe un comentario.',
-        )
-      }
-    } catch {
-      setErr('No se pudo enviar. Revisa tu conexión.')
-    } finally {
-      setSending(false)
-    }
+    if (!t) return
+    setList((l) => [
+      {
+        id: `local-${reportId}-${l.length}`,
+        authorName: name.trim() || null,
+        text: t,
+        createdAt: Date.now(),
+      },
+      ...l,
+    ])
+    setText('')
   }
 
   const flag = (id: string) => {
     if (flagged[id]) return
     setFlagged((f) => ({ ...f, [id]: true }))
-    addCflag(id)
-    flagComment({ data: { id } }).catch(() => {})
   }
 
   return (
     <section>
-      <h2 className="mb-3 text-[15px] font-bold text-ink">
-        Comentarios{list.length ? ` · ${list.length}` : ''}
+      <h2 className="mb-3 flex items-center gap-2 text-[15px] font-bold text-ink">
+        Comentarios
+        {list.length > 0 && (
+          <span className="rounded-full bg-surface-muted px-2 py-0.5 text-[12px] font-bold text-ink-muted tabular-nums">
+            {list.length}
+          </span>
+        )}
       </h2>
 
       <div className="rounded-2xl border border-line p-2.5">
@@ -1010,7 +869,7 @@ function CommentsSection({
           onChange={(e) => setName(e.target.value)}
           maxLength={40}
           placeholder="Tu nombre (opcional)"
-          className="mb-2 w-full bg-transparent px-1.5 text-[13px] text-ink outline-none placeholder:text-ink-faint"
+          className="mb-2 w-full rounded-xl bg-surface-muted px-3 py-2.5 text-[14px] text-ink outline-none placeholder:text-ink-faint"
         />
         <div className="flex items-end gap-2">
           <textarea
@@ -1024,14 +883,13 @@ function CommentsSection({
           <button
             type="button"
             onClick={submit}
-            disabled={!text.trim() || sending}
+            disabled={!text.trim()}
             aria-label="Enviar comentario"
             className="grid size-[40px] flex-none place-items-center rounded-full bg-lagoon text-white disabled:bg-lagoon-disabled"
           >
-            <Send className="size-[18px]" />
+            <SendHorizontal className="size-[18px]" />
           </button>
         </div>
-        {err && <p className="mt-2 px-1 text-[12px] text-danger">{err}</p>}
       </div>
 
       {loading ? (

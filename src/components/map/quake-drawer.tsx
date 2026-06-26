@@ -31,10 +31,14 @@ function fmtGap(ms: number) {
 export function QuakeDrawer({
   data,
   main,
+  heatmap,
+  onToggleHeatmap,
   onClose,
 }: {
   data: QuakeData | null
   main: Quake | null
+  heatmap: boolean
+  onToggleHeatmap: () => void
   onClose: () => void
 }) {
   return (
@@ -60,7 +64,12 @@ export function QuakeDrawer({
       </div>
 
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden px-[18px] pt-[14px] pb-[calc(12px+env(safe-area-inset-bottom))]">
-        <QuakeSheet data={data} main={main} />
+        <QuakeSheet
+          data={data}
+          main={main}
+          heatmap={heatmap}
+          onToggleHeatmap={onToggleHeatmap}
+        />
       </div>
     </div>
   )
@@ -71,9 +80,13 @@ export function QuakeDrawer({
 function QuakeSheet({
   data,
   main,
+  heatmap,
+  onToggleHeatmap,
 }: {
   data: QuakeData | null
   main: Quake | null
+  heatmap: boolean
+  onToggleHeatmap: () => void
 }) {
   if (!data)
     return (
@@ -252,6 +265,34 @@ function QuakeSheet({
                 <span>Moderada</span>
                 <span>Severa</span>
               </div>
+              {/* Toggle de la capa de intensidad (antes vivía en el riel del mapa).
+                  Aquí tiene contexto: la leyenda MMI explica qué se está pintando. */}
+              <button
+                type="button"
+                onClick={onToggleHeatmap}
+                aria-pressed={heatmap}
+                className="mt-[14px] flex w-full items-center gap-[10px] rounded-[12px] border border-[#ededeb] bg-[#f7f9f8] px-[14px] py-[11px] text-left"
+              >
+                <span className="min-w-0 flex-1">
+                  <b className="block text-[14px] font-semibold text-[#173a40]">
+                    Ver intensidad en el mapa
+                  </b>
+                  <span className="block text-[12px] text-[#737f82]">
+                    Pinta los contornos de sacudida al cerrar este boletín
+                  </span>
+                </span>
+                <span
+                  className={`relative h-[26px] w-[44px] flex-none rounded-full transition-colors ${
+                    heatmap ? 'bg-[#0e9c8f]' : 'bg-[#cbd2d0]'
+                  }`}
+                >
+                  <span
+                    className={`absolute top-[3px] h-[20px] w-[20px] rounded-full bg-white shadow-[0_1px_3px_rgba(0,0,0,0.3)] transition-all ${
+                      heatmap ? 'left-[21px]' : 'left-[3px]'
+                    }`}
+                  />
+                </span>
+              </button>
             </section>
           )}
 

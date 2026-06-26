@@ -114,16 +114,15 @@ function Splash({ quakes }: { quakes: QuakeData | null }) {
       <MapChrome
         quakes={quakes}
         satellite={false}
-        heatmap
         outsideVE={false}
         infoOpen={false}
+        searchOpen={false}
         tab="mapa"
         onTab={noop}
         onBanner={noop}
-        onHelp={noop}
         onEmergency={noop}
+        onSearch={noop}
         onToggleSatellite={noop}
-        onToggleHeatmap={noop}
         onRecenter={noop}
         onReport={noop}
       />

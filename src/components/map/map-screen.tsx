@@ -37,8 +37,12 @@ import { MapChrome, mainAndLatest } from './map-chrome'
 import type { Tab } from './map-chrome'
 import { FeedScreen } from './feed-screen'
 import { AvisosScreen } from './avisos-screen'
+import { MasScreen } from './mas-screen'
+import { ComoAyudarScreen } from './como-ayudar-screen'
+import { ExteriorDialog } from './exterior-dialog'
+import { MapSearch } from './map-search'
 import { QuakeDrawer } from './quake-drawer'
-import { HelpDialog } from './help-dialog'
+import { EmergenciasDialog } from './emergencias-dialog'
 import { AboutDialog } from './about-dialog'
 import { ReportWizard } from './report-wizard'
 import { LocationPicker } from './location-picker'
@@ -176,26 +180,22 @@ function seedCenter(): [number, number] {
   return QUAKE_ZONE
 }
 
-// Icono cacheado por (tipo, confirms): el divIcon es config inmutable y se
-// comparte entre marcadores sin problema. Así 5000 pines reusan ~una docena de
-// iconos en vez de reconstruir el string HTML en cada render.
+// Icono cacheado por tipo: el divIcon es config inmutable y se comparte entre
+// marcadores sin problema. Así 5000 pines reusan ~una docena de iconos en vez de
+// reconstruir el string HTML en cada render. (El contador de confirmaciones se
+// quitó del pin — "Lo confirmo" ya no es una acción.)
 const iconCache = new Map<string, L.DivIcon>()
 function pinIcon(p: Pin) {
-  const key = `${p.type}|${p.confirms}`
-  const cached = iconCache.get(key)
+  const cached = iconCache.get(p.type)
   if (cached) return cached
   const t = typeOf(p.type)
-  const cnt =
-    p.confirms > 0
-      ? `<span class="absolute -top-[6px] -right-[8px] bg-[#1a1c1e] text-white text-[11px] font-bold min-w-[19px] h-[19px] rounded-[10px] grid place-items-center px-[5px] border-2 border-white">${p.confirms}</span>`
-      : ''
   const icon = L.divIcon({
     className: '!bg-none !border-none',
-    html: `<div class="relative w-[38px] h-[38px] [filter:drop-shadow(0_4px_4px_rgba(0,0,0,0.28))]"><div class="w-[38px] h-[38px] rounded-[50%_50%_50%_0] -rotate-45 grid place-items-center border-[2.5px] border-white [&_svg]:rotate-45 [&_svg]:w-[19px] [&_svg]:h-[19px]" style="background:${t.color}"><svg viewBox="0 0 24 24">${t.svg}</svg></div>${cnt}</div>`,
+    html: `<div class="w-[38px] h-[38px] [filter:drop-shadow(0_4px_4px_rgba(0,0,0,0.28))]"><div class="w-[38px] h-[38px] rounded-[50%_50%_50%_0] -rotate-45 grid place-items-center border-[2.5px] border-white [&_svg]:rotate-45 [&_svg]:w-[19px] [&_svg]:h-[19px]" style="background:${t.color}"><svg viewBox="0 0 24 24">${t.svg}</svg></div></div>`,
     iconSize: [38, 38],
     iconAnchor: [19, 40],
   })
-  iconCache.set(key, icon)
+  iconCache.set(p.type, icon)
   return icon
 }
 
@@ -396,24 +396,6 @@ const PinsLayer = memo(function PinsLayer({
   )
 })
 
-// "Más" aún sin contenido (Fase 8). El nav ya es el final para no rehacerlo;
-// el panel se rellena en su fase. ponytail: placeholder mínimo a propósito.
-function TabPlaceholder({ title }: { title: string }) {
-  return (
-    <div className="fixed inset-0 z-[820] flex flex-col bg-surface-muted">
-      <header
-        className="flex-none border-b border-line bg-white"
-        style={{ paddingTop: 'max(12px, env(safe-area-inset-top))' }}
-      >
-        <h1 className="px-4 pb-3 text-[20px] font-extrabold text-ink">{title}</h1>
-      </header>
-      <div className="grid flex-1 place-items-center px-8 text-center">
-        <p className="text-[14px] text-ink-muted">Próximamente.</p>
-      </div>
-    </div>
-  )
-}
-
 export default function MapScreen({
   initialPins = [],
   initialQuakes = null,
@@ -449,6 +431,24 @@ export default function MapScreen({
   // GPS confirmó al usuario fuera de Venezuela → ocultamos "Mi ubicación"
   // (centrar en su GPS no sirve aquí). Null hasta que el GPS resuelva.
   const [outsideVE, setOutsideVE] = useState(false)
+  // Buscador de lugares del mapa (lupa del topbar) → recenter vía Mapbox.
+  const [searchOpen, setSearchOpen] = useState(false)
+  // Dialog del exterior: "no volver a mostrar" persiste en localStorage;
+  // ?exterior=1 lo fuerza para revisarlo en preview sin GPS fuera de VE.
+  const [exteriorDismissed, setExteriorDismissed] = useState(() => {
+    try {
+      return localStorage.getItem('ave-exterior-dismissed') === '1'
+    } catch {
+      return false
+    }
+  })
+  const [forceExterior] = useState(() => {
+    try {
+      return new URLSearchParams(location.search).get('exterior') === '1'
+    } catch {
+      return false
+    }
+  })
   // Detalle de un reporte: id seleccionado (pin o deep-link ?r=) + fila cargada.
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [detail, setDetail] = useState<ReportDetail | null>(null)
@@ -647,8 +647,35 @@ export default function MapScreen({
       {/* Paneles de tab: overlays sobre el mapa vivo (no desmontan Leaflet). El
           bottom-nav (en MapChrome, z-840) queda por encima. */}
       {tab === 'reportes' && <FeedScreen onSelect={setSelectedId} />}
-      {tab === 'avisos' && <AvisosScreen />}
-      {tab === 'mas' && <TabPlaceholder title="Más" />}
+      {/* Etapa 1: el CTA "Ver reporte" de una notificación lleva al feed (los
+          reportId mock no existen en DB); E2 lo abre directo con setSelectedId. */}
+      {tab === 'avisos' && <AvisosScreen onOpenReport={() => setTab('reportes')} />}
+      {tab === 'ayudar' && <ComoAyudarScreen />}
+      {tab === 'mas' && (
+        <MasScreen
+          onComoAyudar={() => setTab('ayudar')}
+          onHelp={() => setHelpOpen(true)}
+          onAbout={() => setAboutOpen(true)}
+        />
+      )}
+
+      {(outsideVE || forceExterior) && !exteriorDismissed && (
+        <ExteriorDialog
+          onHelp={() => {
+            setExteriorDismissed(true)
+            setTab('ayudar')
+          }}
+          onDismiss={() => {
+            try {
+              localStorage.setItem('ave-exterior-dismissed', '1')
+            } catch {
+              /* sin localStorage: se descarta solo esta sesión */
+            }
+            setExteriorDismissed(true)
+          }}
+          onClose={() => setExteriorDismissed(true)}
+        />
+      )}
 
       {/* Elegir ubicación sobre el mapa vivo: el chrome se oculta y aparece la
           búsqueda + X + pin central + botón confirmar. El mapa no se mueve. */}
@@ -656,19 +683,27 @@ export default function MapScreen({
         <MapChrome
           quakes={quakes}
           satellite={satellite}
-          heatmap={heatmap}
           outsideVE={outsideVE}
           infoOpen={infoOpen}
+          searchOpen={searchOpen && tab === 'mapa'}
           tab={tab}
           onTab={setTab}
           onBanner={() => setInfoOpen(true)}
-          onHelp={() => setHelpOpen(true)}
           onEmergency={() => setHelpOpen(true)}
+          onSearch={() => setSearchOpen(true)}
           onToggleSatellite={() => setSatellite((s) => !s)}
-          onToggleHeatmap={() => setHeatmap((h) => !h)}
           onRecenter={recenter}
-          onReport={() => setReportFlow('picking')}
+          onReport={() => {
+            // Elegir ubicación es sobre el mapa vivo: si estás en otra tab, el
+            // panel taparía el mapa → volvemos a "mapa" antes de abrir el picker.
+            setTab('mapa')
+            setReportFlow('picking')
+          }}
         />
+      )}
+
+      {searchOpen && tab === 'mapa' && reportFlow !== 'picking' && (
+        <MapSearch mapRef={mapRef} onClose={() => setSearchOpen(false)} />
       )}
 
       {reportFlow === 'picking' && (
@@ -702,6 +737,8 @@ export default function MapScreen({
         <QuakeDrawer
           data={quakes}
           main={main}
+          heatmap={heatmap}
+          onToggleHeatmap={() => setHeatmap((h) => !h)}
           onClose={() => setInfoOpen(false)}
         />
       )}
@@ -715,27 +752,24 @@ export default function MapScreen({
       )}
 
       {selectedId && (
-        <ReportDetailScreen report={detail} user={user} onClose={closeDetail} />
+        <ReportDetailScreen
+          report={detail}
+          user={user}
+          onClose={closeDetail}
+          onViewOnMap={(lat, lng) => {
+            mapRef.current?.setView([lat, lng], 16)
+            closeDetail()
+          }}
+        />
       )}
 
-      <HelpDialog
+      <EmergenciasDialog
         open={helpOpen}
         onClose={() => setHelpOpen(false)}
-        onAbout={() => {
-          setHelpOpen(false)
-          setAboutOpen(true)
-        }}
         userEstado={userEstado}
       />
 
-      <AboutDialog
-        open={aboutOpen}
-        onClose={() => setAboutOpen(false)}
-        onBack={() => {
-          setAboutOpen(false)
-          setHelpOpen(true)
-        }}
-      />
+      <AboutDialog open={aboutOpen} onClose={() => setAboutOpen(false)} />
     </div>
   )
 }

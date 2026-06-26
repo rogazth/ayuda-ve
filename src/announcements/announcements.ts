@@ -58,5 +58,6 @@ export function cleanAnnouncement(input: SuggestAnnouncementInput) {
   if (!ANNOUNCEMENT_CATEGORIES.includes(category as AnnouncementCategory))
     throw new Error('categoría inválida')
 
-  return { category, title, body, contact, url }
+  // tras el guard, category es una categoría válida (includes no narrowea solo).
+  return { category: category as AnnouncementCategory, title, body, contact, url }
 }

@@ -19,21 +19,24 @@
   --color-lagoon-wash: #e6f5f3;
   --color-lagoon-disabled: #9bd4cd;
 
-  /* Ink (texto). `ink*` neutro para contenido; `sea-ink*` = marca costera del
-     chrome del mapa (riel, banner del sismo). */
-  --color-ink: #1a1c1e;
-  --color-ink-body: #374151;
-  --color-ink-muted: #6b7280;
-  --color-ink-faint: #9ca3af;
+  /* Ink (texto). Alineado al POC: un solo ink #173a40 para contenido primario,
+     ink-muted #5a6a6c para secundario. `sea-ink*` = chrome costero del mapa
+     (riel, banner del sismo) — mismo ink ahora, sin fragmentar el tono. */
+  --color-ink: #173a40;
+  --color-ink-body: #28403f;
+  --color-ink-muted: #5a6a6c;
+  --color-ink-faint: #9aa6a3;
   --color-sea-ink: #173a40;
   --color-sea-ink-soft: #416166;
 
-  /* Superficies neutras + líneas. */
-  --color-surface-muted: #f3f4f6;
-  --color-line: #e5e7eb;
+  /* Superficies neutras + líneas (POC: soft #f1f1ee, border #e8e7e3 — cálidos,
+     no el gris azulado anterior). */
+  --color-surface-muted: #f1f1ee;
+  --color-line: #e8e7e3;
 
-  /* Éxito / verificado (verde): badge verificado, "ya apareció", WhatsApp. */
-  --color-success: #15803d;
+  /* Éxito / verificado (POC palm #1f5a3a, más sobrio que el verde brillante):
+     badge verificado, "ya apareció", WhatsApp. */
+  --color-success: #1f5a3a;
   --color-success-wash: #f0fdf4;
   --color-success-line: #bbf7d0;
 

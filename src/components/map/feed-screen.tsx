@@ -1,16 +1,16 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { BadgeCheck, SlidersHorizontal } from 'lucide-react'
+import { BadgeCheck, ChevronLeft, ChevronRight, MapPin, MessageCircle } from 'lucide-react'
 import { fmtAge, typeOf } from '../../reports/reports'
 import { fetchFeed, fetchTypeCounts } from '../../reports/reports.functions'
 import type { FeedItem, TypeCounts } from '../../reports/reports.functions'
-import { FiltersSheet } from './filters-sheet'
 
 const PAGE = 20 // = FEED_LIMIT en reports.functions; página corta → done
 const EMPTY: TypeCounts = { counts: {}, found: 0 }
 
 // Feed cronológico de reportes (panel sobre el mapa, tab "Reportes"). Scroll
-// infinito por cursor; chips = filtro + contador; hoja de Filtros con la lista
-// completa. La card carga solo portada + nº de fotos (el detalle trae el resto).
+// infinito por cursor; los chips son el único filtro (selección única, con
+// contador) — flechas laterales avisan que la fila se desplaza. La card carga
+// solo portada + nº de fotos (el detalle trae el resto).
 export function FeedScreen({ onSelect }: { onSelect: (id: string) => void }) {
   const [items, setItems] = useState<FeedItem[]>([])
   const [counts, setCounts] = useState<TypeCounts>(EMPTY)
@@ -18,10 +18,23 @@ export function FeedScreen({ onSelect }: { onSelect: (id: string) => void }) {
   const [status, setStatus] = useState<'visible' | 'found'>('visible')
   const [loading, setLoading] = useState(true)
   const [done, setDone] = useState(false)
-  const [filtersOpen, setFiltersOpen] = useState(false)
   const sentinel = useRef<HTMLDivElement>(null)
   // reqId: una respuesta de un filtro viejo no pisa la del filtro actual.
   const reqId = useRef(0)
+  // Flechas laterales de la fila de chips: solo se muestran cuando hay scroll
+  // disponible en ese lado (affordance para que se note que es deslizable).
+  const chipsRef = useRef<HTMLDivElement>(null)
+  const [edges, setEdges] = useState({ l: false, r: false })
+  const updateEdges = useCallback(() => {
+    const el = chipsRef.current
+    if (!el) return
+    const { scrollLeft, scrollWidth, clientWidth } = el
+    setEdges({ l: scrollLeft > 4, r: scrollLeft + clientWidth < scrollWidth - 4 })
+  }, [])
+  const nudge = (dir: number) => {
+    const el = chipsRef.current
+    if (el) el.scrollBy({ left: dir * el.clientWidth * 0.7, behavior: 'smooth' })
+  }
 
   const query = useCallback(
     (cursor?: number) => ({
@@ -79,15 +92,19 @@ export function FeedScreen({ onSelect }: { onSelect: (id: string) => void }) {
     return () => io.disconnect()
   }, [loadMore])
 
-  const toggleType = (t: string) =>
-    setTypes((cur) => (cur.includes(t) ? cur.filter((x) => x !== t) : [...cur, t]))
-
-  // Chips inline: solo tipos con reportes, más poblados primero. La lista entera
-  // vive en la hoja de Filtros.
+  // Chips: solo tipos con reportes, más poblados primero. Selección única.
   const chips = Object.entries(counts.counts)
     .filter(([, n]) => n > 0)
     .sort((a, b) => b[1] - a[1])
   const filtered = types.length > 0 || status === 'found'
+
+  // Recalcula las flechas cuando llegan los contadores (los chips aparecen) y al
+  // redimensionar.
+  useEffect(() => {
+    updateEdges()
+    window.addEventListener('resize', updateEdges)
+    return () => window.removeEventListener('resize', updateEdges)
+  }, [updateEdges, chips.length])
 
   return (
     <div className="fixed inset-0 z-[820] flex flex-col bg-surface-muted">
@@ -96,32 +113,38 @@ export function FeedScreen({ onSelect }: { onSelect: (id: string) => void }) {
         style={{ paddingTop: 'max(12px, env(safe-area-inset-top))' }}
       >
         <h1 className="px-4 pb-2 text-[20px] font-extrabold text-ink">Reportes</h1>
-        <div className="flex items-center gap-2 px-4 pb-3">
-          <div className="flex flex-1 gap-2 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-            {counts.found > 0 && (
-              <button
-                type="button"
-                onClick={() => setStatus((s) => (s === 'found' ? 'visible' : 'found'))}
-                className={`inline-flex flex-none items-center gap-1.5 rounded-full border px-3 py-1.5 text-[13px] font-semibold ${
-                  status === 'found'
-                    ? 'border-success bg-success text-white'
-                    : 'border-success-line bg-white text-success'
-                }`}
-              >
-                <BadgeCheck className="size-[15px]" /> Encontrados
-                <span className={status === 'found' ? 'opacity-90' : 'text-ink-muted'}>
-                  {counts.found}
-                </span>
-              </button>
-            )}
+        {/* Chips de filtro (Todos · tipos · Encontrados), selección única: tocar
+            uno reemplaza el filtro. Flechas laterales con degradado: solo salen
+            cuando hay scroll en ese lado, para que se note que la fila desliza. */}
+        <div className="relative px-4 pb-3">
+          <div
+            ref={chipsRef}
+            onScroll={updateEdges}
+            className="flex gap-2 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+          >
+            <button
+              type="button"
+              onClick={() => {
+                setTypes([])
+                setStatus('visible')
+              }}
+              className={`inline-flex flex-none items-center rounded-full border px-3.5 py-1.5 text-[13px] font-semibold ${
+                !filtered ? 'border-ink bg-ink text-white' : 'border-line bg-white text-ink-body'
+              }`}
+            >
+              Todos
+            </button>
             {chips.map(([t, n]) => {
               const meta = typeOf(t)
-              const on = types.includes(t)
+              const on = status === 'visible' && types.includes(t)
               return (
                 <button
                   key={t}
                   type="button"
-                  onClick={() => toggleType(t)}
+                  onClick={() => {
+                    setTypes([t])
+                    setStatus('visible')
+                  }}
                   className={`inline-flex flex-none items-center gap-1.5 rounded-full border px-3 py-1.5 text-[13px] font-semibold ${
                     on ? 'text-white' : 'border-line bg-white text-ink-body'
                   }`}
@@ -136,20 +159,50 @@ export function FeedScreen({ onSelect }: { onSelect: (id: string) => void }) {
                 </button>
               )
             })}
-          </div>
-          <button
-            type="button"
-            onClick={() => setFiltersOpen(true)}
-            aria-label="Filtros"
-            className={`relative grid size-[38px] flex-none place-items-center rounded-full border ${
-              filtered ? 'border-lagoon text-lagoon-ink' : 'border-line text-ink-body'
-            }`}
-          >
-            <SlidersHorizontal className="size-[18px]" />
-            {filtered && (
-              <span className="absolute -top-0.5 -right-0.5 size-2.5 rounded-full bg-lagoon ring-2 ring-white" />
+            {counts.found > 0 && (
+              <button
+                type="button"
+                onClick={() => {
+                  setStatus('found')
+                  setTypes([])
+                }}
+                className={`inline-flex flex-none items-center gap-1.5 rounded-full border px-3 py-1.5 text-[13px] font-semibold ${
+                  status === 'found'
+                    ? 'border-success bg-success text-white'
+                    : 'border-success-line bg-white text-success'
+                }`}
+              >
+                <BadgeCheck className="size-[15px]" /> Encontrados
+                <span className={status === 'found' ? 'opacity-90' : 'text-ink-muted'}>
+                  {counts.found}
+                </span>
+              </button>
             )}
-          </button>
+          </div>
+          {edges.l && (
+            <button
+              type="button"
+              onClick={() => nudge(-1)}
+              aria-label="Ver filtros anteriores"
+              className="absolute top-0 bottom-3 left-0 z-10 flex items-center bg-gradient-to-r from-white via-white to-transparent pr-7 pl-4"
+            >
+              <span className="grid size-7 place-items-center rounded-full border border-line bg-white shadow-[0_1px_3px_rgba(23,58,64,0.14)]">
+                <ChevronLeft className="size-[18px] text-ink-body" />
+              </span>
+            </button>
+          )}
+          {edges.r && (
+            <button
+              type="button"
+              onClick={() => nudge(1)}
+              aria-label="Ver más filtros"
+              className="absolute top-0 bottom-3 right-0 z-10 flex items-center bg-gradient-to-l from-white via-white to-transparent pr-4 pl-7"
+            >
+              <span className="grid size-7 place-items-center rounded-full border border-line bg-white shadow-[0_1px_3px_rgba(23,58,64,0.14)]">
+                <ChevronRight className="size-[18px] text-ink-body" />
+              </span>
+            </button>
+          )}
         </div>
       </header>
 
@@ -170,68 +223,89 @@ export function FeedScreen({ onSelect }: { onSelect: (id: string) => void }) {
         )}
         <div ref={sentinel} className="h-px" />
       </div>
-
-      {filtersOpen && (
-        <FiltersSheet
-          counts={counts}
-          types={types}
-          status={status}
-          onTypes={setTypes}
-          onStatus={setStatus}
-          onClose={() => setFiltersOpen(false)}
-        />
-      )}
     </div>
   )
 }
 
+// Etapa 1: el backend de comentarios está parqueado (sin conteo por reporte). Para
+// revisar el layout de la card mostramos un conteo mock determinista por id; E2 lo
+// reemplaza con el conteo real de la tabla comments. [[mock]]
+function mockCommentCount(id: string): number {
+  let h = 0
+  for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) >>> 0
+  return h % 14
+}
+
+// Card del feed: fila superior (marca + tipo + dirección + tiempo), título,
+// portada a ancho completo, y comentarios solo si hay (sin icono en 0). La
+// procedencia (verificado/comunidad) vive en el detalle, no en la lista. La
+// dirección sale del meta (feedAddress); el conteo es mock en Etapa 1 (backend
+// parqueado).
 function Card({ item, onClick }: { item: FeedItem; onClick: () => void }) {
   const meta = typeOf(item.type)
+  const comments = mockCommentCount(item.id)
   return (
     <button
       type="button"
       onClick={onClick}
-      className="mb-2.5 flex w-full items-center gap-3 rounded-2xl bg-white p-3 text-left shadow-[0_1px_3px_rgba(23,58,64,0.06)]"
+      className="mb-3 block w-full overflow-hidden rounded-2xl border border-line bg-white text-left shadow-[0_1px_3px_rgba(23,58,64,0.07)]"
     >
-      <span
-        className="grid size-[40px] flex-none place-items-center rounded-xl"
-        style={{ background: meta.color }}
-      >
-        <svg
-          viewBox="0 0 24 24"
-          className="size-[22px]"
-          dangerouslySetInnerHTML={{ __html: meta.svg }}
-        />
-      </span>
-      <div className="min-w-0 flex-1">
-        <p className="truncate text-[15px] font-bold text-ink">{item.title}</p>
-        <p className="mt-0.5 flex items-center gap-1.5 text-[13px] text-ink-muted">
-          <span>{fmtAge(item.createdAt)}</span>
-          {item.confirms > 0 && (
-            <>
-              <span className="text-ink-faint">·</span>
-              <span>
-                {item.confirms} {item.confirms === 1 ? 'confirma' : 'confirman'}
-              </span>
-            </>
+      <div className="flex items-start gap-2.5 px-3 pt-3 pb-2">
+        <span
+          className="grid size-9 flex-none place-items-center rounded-full"
+          style={{ background: meta.color }}
+        >
+          <svg
+            viewBox="0 0 24 24"
+            className="size-[18px]"
+            dangerouslySetInnerHTML={{ __html: meta.svg }}
+          />
+        </span>
+        <div className="min-w-0 flex-1">
+          <p
+            className="text-[11px] font-extrabold tracking-[0.04em] uppercase"
+            style={{ color: meta.color }}
+          >
+            {meta.label}
+          </p>
+          {item.address && (
+            <p className="mt-0.5 flex items-center gap-1 text-[12px] text-ink-muted">
+              <MapPin className="size-[13px] flex-none" />
+              <span className="truncate">{item.address}</span>
+            </p>
           )}
-          {item.verified && <BadgeCheck className="size-[15px] flex-none text-success" />}
-        </p>
+        </div>
+        <span className="flex-none text-[12px] text-ink-muted">
+          {fmtAge(item.createdAt)}
+        </span>
       </div>
+
+      <p className="px-3 text-[16px] leading-snug font-bold text-ink">
+        {item.title}
+      </p>
+
       {item.cover && (
-        <span className="relative flex-none">
+        <div className="relative mt-2.5">
           <img
             src={item.cover}
             alt=""
             loading="lazy"
-            className="size-[64px] rounded-xl bg-surface-muted object-cover"
+            className="h-[150px] w-full bg-surface-muted object-cover"
           />
           {item.mediaCount > 1 && (
-            <span className="absolute right-1 bottom-1 rounded-md bg-black/60 px-1.5 py-0.5 text-[10px] font-bold text-white">
-              +{item.mediaCount - 1}
+            <span className="absolute right-2 bottom-2 rounded-md bg-black/60 px-1.5 py-0.5 text-[11px] font-bold text-white">
+              +{item.mediaCount - 1} fotos
             </span>
           )}
-        </span>
+        </div>
+      )}
+
+      {comments > 0 ? (
+        <div className="flex items-center gap-1.5 px-3 py-2.5 text-[13px] font-semibold text-ink-muted">
+          <MessageCircle className="size-[16px]" /> {comments}
+        </div>
+      ) : (
+        <div className="h-3" />
       )}
     </button>
   )

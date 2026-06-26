@@ -6,7 +6,13 @@ import { geoSuggest, geoRetrieve, type Suggestion } from '../../geo/geo.function
 // Búsqueda de dirección (Mapbox Search Box, server-side). Mueve EL MAPA VIVO con
 // flyTo; no captura la ubicación: el pin es el centro del mapa y se lee al
 // confirmar. suggest+retrieve comparten session_token (un cobro) y rota tras pick.
-function LocationSearch({ mapRef }: { mapRef: React.RefObject<LeafletMap | null> }) {
+export function LocationSearch({
+  mapRef,
+  onPicked,
+}: {
+  mapRef: React.RefObject<LeafletMap | null>
+  onPicked?: () => void
+}) {
   const [q, setQ] = useState('')
   const [results, setResults] = useState<Suggestion[]>([])
   const [loading, setLoading] = useState(false)
@@ -61,11 +67,12 @@ function LocationSearch({ mapRef }: { mapRef: React.RefObject<LeafletMap | null>
     session.current = crypto.randomUUID() // retrieve cierra la sesión: rota el token
     if (!p) return
     mapRef.current?.flyTo(p, 16, { duration: 0.6 })
+    onPicked?.()
   }
 
   return (
     <div className="relative">
-      <div className="flex items-center gap-2 rounded-xl bg-white px-3 py-2.5 shadow-lg">
+      <div className="flex h-[44px] items-center gap-2 rounded-xl bg-white px-3 shadow-lg">
         <Search className="size-4 flex-shrink-0 text-[#6b7280]" />
         <input
           value={q}
@@ -158,22 +165,26 @@ export function LocationPicker({
         />
       </div>
 
-      {/* botón de confirmar (donde estaba el toolbar) */}
+      {/* instrucción + confirmar (donde estaba el toolbar). Copy grande y directo,
+          pensado para que cualquiera —también personas mayores— entienda qué hacer. */}
       <div
         className="fixed inset-x-0 bottom-0 z-[1000] px-4 pt-3"
         style={{ paddingBottom: 'max(20px, env(safe-area-inset-bottom))' }}
       >
-        <p className="mb-2.5 flex justify-center">
-          <span className="rounded-full bg-black/75 px-3.5 py-2 text-xs font-medium text-white shadow-lg">
-            📍 Mueve el mapa para centrar el punto
-          </span>
-        </p>
+        <div className="mx-auto mb-3 max-w-[360px] rounded-2xl bg-black/75 px-4 py-3 text-center text-white shadow-lg">
+          <p className="text-[17px] font-bold leading-tight">
+            📍 ¿Dónde quieres reportar?
+          </p>
+          <p className="mt-1 text-[13.5px] leading-snug opacity-90">
+            Mueve el mapa hasta el lugar exacto
+          </p>
+        </div>
         <button
           type="button"
           onClick={confirm}
-          className="h-[54px] w-full rounded-2xl bg-[#0e9c8f] text-[17px] font-bold text-white shadow-lg active:bg-[#0c8a7e]"
+          className="h-[56px] w-full rounded-2xl bg-lagoon text-[18px] font-bold text-white shadow-lg active:bg-lagoon-hover"
         >
-          Reportar aquí
+          Seleccionar ubicación
         </button>
       </div>
     </>

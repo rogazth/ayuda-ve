@@ -1,25 +1,23 @@
 import {
-  Eye,
+  Heart,
   Layers,
   LocateFixed,
   Map as MapIcon,
-  Megaphone,
   Menu,
   Newspaper,
-  Phone,
   Plus,
+  Search,
   Siren,
-  Waves,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { fmtAge } from '../../reports/reports'
-import { esPlace, magColor } from '../../quakes/quakes'
+import { magColor } from '../../quakes/quakes'
 import type { Quake, QuakeData } from '../../quakes/quakes.functions'
 
 // Tabs como overlays sobre el mapa montado (no rutas): 'mapa' = sin panel,
 // el resto = panel fixed encima. Vive aquí para pintarse en el splash sin pop-in.
-export type Tab = 'mapa' | 'reportes' | 'avisos' | 'mas'
+export type Tab = 'mapa' | 'reportes' | 'avisos' | 'mas' | 'ayudar'
 
 // Sismo principal (el del badge) y la réplica más reciente. Usado por MapScreen
 // (centra el mapa en el principal) y por el chrome para pintar el badge.
@@ -42,11 +40,13 @@ function NavBtn({
   icon: Icon,
   label,
   active,
+  badge,
   onClick,
 }: {
   icon: LucideIcon
   label: string
   active: boolean
+  badge?: boolean
   onClick: () => void
 }) {
   return (
@@ -58,7 +58,12 @@ function NavBtn({
         active ? 'text-lagoon-ink' : 'text-ink-muted'
       }`}
     >
-      <Icon className="size-[22px]" strokeWidth={active ? 2.4 : 2} />
+      <span className="relative">
+        <Icon className="size-[22px]" strokeWidth={active ? 2.4 : 2} />
+        {badge && (
+          <span className="absolute -top-0.5 -right-[7px] size-2 rounded-full bg-danger ring-2 ring-white" />
+        )}
+      </span>
       {label}
     </button>
   )
@@ -71,89 +76,89 @@ function NavBtn({
 export function MapChrome({
   quakes,
   satellite,
-  heatmap,
   outsideVE,
   infoOpen,
+  searchOpen,
   tab,
   onTab,
   onBanner,
-  onHelp,
   onEmergency,
+  onSearch,
   onToggleSatellite,
-  onToggleHeatmap,
   onRecenter,
   onReport,
 }: {
   quakes: QuakeData | null
   satellite: boolean
-  heatmap: boolean
   outsideVE: boolean
   infoOpen: boolean
+  searchOpen: boolean
   tab: Tab
   onTab: (t: Tab) => void
   onBanner: () => void
-  onHelp: () => void
   onEmergency: () => void
+  onSearch: () => void
   onToggleSatellite: () => void
-  onToggleHeatmap: () => void
   onRecenter: () => void
   onReport: () => void
 }) {
   const { main, latest } = mainAndLatest(quakes)
-  const onMap = tab === 'mapa'
+  // "El último sismo": la réplica más reciente o, si no hay, el principal.
+  const last = latest ?? main
+  // El buscador trae su propia barra arriba → ocultamos el top del mapa
+  // (Emergencias + badge del terremoto) para no encimar ni duplicar.
+  const onMap = tab === 'mapa' && !searchOpen
   return (
     <>
-      {/* Top del mapa: Emergencias (acceso rápido, no enterrado) + badge del
-          terremoto a su lado. Solo en la tab 'mapa'; oculto bajo el boletín. */}
+      {/* Top del mapa (POC A): fila 1 = buscar (izq) + Emergencias (der,
+          prominente); fila 2 = badge del terremoto. Solo en 'mapa'; oculto bajo
+          el boletín. */}
       {onMap && !infoOpen && (
-        <div className="absolute inset-x-0 top-[calc(env(safe-area-inset-top)+12px)] z-[830] flex items-start gap-2 px-[14px]">
-          <button
-            type="button"
-            onClick={onEmergency}
-            className="inline-flex h-[40px] flex-none items-center gap-1.5 rounded-full bg-danger px-3.5 text-[13px] font-bold text-white shadow-[0_3px_12px_rgba(215,38,61,0.35)]"
-          >
-            <Siren className="size-[18px]" /> Emergencias
-          </button>
-          {main && (
-            <Button
-              variant="ghost"
-              className="ave-quakebar h-auto min-w-0 flex-1 flex items-center gap-[10px] py-[9px] px-4 border-none rounded-full text-left cursor-pointer bg-white text-ink shadow-[0_3px_14px_rgba(23,58,64,0.18)] hover:bg-white hover:text-ink"
-              onClick={onBanner}
-              style={{ ['--sev' as string]: magColor(main.mag) }}
-              aria-expanded={false}
+        <div className="absolute inset-x-0 top-[calc(env(safe-area-inset-top)+12px)] z-[830] px-[14px]">
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={onSearch}
+              aria-label="Buscar lugar"
+              className="grid size-[40px] flex-none place-items-center rounded-full border border-line bg-white text-ink shadow-[0_3px_12px_rgba(23,58,64,0.14)]"
             >
-              <span className="relative w-[14px] h-[14px] flex-[0_0_auto] grid place-items-center">
-                <span className="absolute inset-0 rounded-full border-2 border-[color:var(--sev)] animate-pulse-ring motion-reduce:animate-none" />
-                <span className="w-[10px] h-[10px] rounded-full bg-[var(--sev)] shadow-[0_0_0_2px_#fff]" />
-              </span>
-              <span className="flex flex-col leading-[1.15] min-w-0">
-                <b className="text-[14px] font-bold">Ver información terremoto</b>
-                <span className="text-[12px] opacity-85 whitespace-nowrap overflow-hidden text-ellipsis">
-                  {latest
-                    ? `Última réplica · M ${latest.mag.toFixed(1)} · ${fmtAge(latest.time)}`
-                    : `M ${main.mag.toFixed(1)} · ${fmtAge(main.time)} · ${esPlace(main.place) || 'Venezuela'}`}
+              <Search className="size-[19px]" />
+            </button>
+            <button
+              type="button"
+              onClick={onEmergency}
+              className="ml-auto inline-flex h-[40px] flex-none items-center gap-1.5 rounded-full bg-danger px-3.5 text-[13px] font-bold text-white shadow-[0_3px_12px_rgba(215,38,61,0.35)]"
+            >
+              <Siren className="size-[18px]" /> Emergencias
+            </button>
+          </div>
+          {last && (
+            <div className="mt-2 flex">
+              <Button
+                variant="ghost"
+                className="ave-quakebar inline-flex h-auto min-w-0 items-center gap-2 rounded-full border-none bg-white px-3.5 py-[7px] text-left text-ink shadow-[0_3px_14px_rgba(23,58,64,0.18)] hover:bg-white hover:text-ink"
+                onClick={onBanner}
+                style={{ ['--sev' as string]: magColor(last.mag) }}
+                aria-expanded={false}
+              >
+                <span className="relative grid h-[12px] w-[12px] flex-none place-items-center">
+                  <span className="absolute inset-0 rounded-full border-2 border-[color:var(--sev)] animate-pulse-ring motion-reduce:animate-none" />
+                  <span className="h-[8px] w-[8px] rounded-full bg-[var(--sev)] shadow-[0_0_0_2px_#fff]" />
                 </span>
-              </span>
-              {/* Ojo = "ver el boletín". */}
-              <span className="grid h-[24px] w-[24px] flex-[0_0_auto] place-items-center rounded-full bg-black/[0.06] text-ink">
-                <Eye className="size-[16px] opacity-70" />
-              </span>
-            </Button>
+                <span className="text-[15px] font-bold whitespace-nowrap">
+                  Último sismo · M {last.mag.toFixed(1)} · {fmtAge(last.time)}
+                </span>
+              </Button>
+            </div>
           )}
         </div>
       )}
 
-      {/* Riel flotante de capas: Ayuda + Vista + Intensidad + Mi ubicación. Solo
-          en la tab 'mapa', por encima del bottom-nav. */}
+      {/* Riel flotante de capas: Vista + Mi ubicación. Solo en la tab 'mapa', por
+          encima del bottom-nav. (Ayuda salió: duplicaba Emergencias. Intensidad
+          se movió al boletín del terremoto.) */}
       {onMap && (
         <div className="absolute right-[14px] bottom-[calc(78px+env(safe-area-inset-bottom))] z-[805] flex flex-col items-end gap-3">
-          <Button
-            variant="ghost"
-            className="inline-flex items-center gap-2 h-[46px] pr-[18px] pl-4 border-none rounded-[999px] bg-white text-sea-ink text-[15px] font-bold shadow-[0_3px_12px_rgba(0,0,0,0.18)] cursor-pointer hover:bg-surface-muted hover:text-sea-ink"
-            onClick={onHelp}
-          >
-            <Phone className="size-5 text-lagoon" /> Ayuda
-          </Button>
           <Button
             variant="ghost"
             className={`inline-flex items-center gap-2 h-[46px] pr-[18px] pl-4 rounded-[999px] text-[15px] font-bold shadow-[0_3px_10px_rgba(0,0,0,0.16)] border-none cursor-pointer ${
@@ -165,19 +170,6 @@ export function MapChrome({
             onClick={onToggleSatellite}
           >
             <Layers className="size-5" /> Vista
-          </Button>
-          {/* Intensidad: prende/apaga el mapa de calor (sacudida MMI del sismo) */}
-          <Button
-            variant="ghost"
-            className={`inline-flex items-center gap-2 h-[46px] pr-[18px] pl-4 rounded-[999px] text-[15px] font-bold shadow-[0_3px_10px_rgba(0,0,0,0.16)] border-none cursor-pointer ${
-              heatmap
-                ? 'bg-sea-ink text-white hover:bg-sea-ink hover:text-white'
-                : 'bg-white text-sea-ink hover:bg-surface-muted hover:text-sea-ink'
-            }`}
-            aria-pressed={heatmap}
-            onClick={onToggleHeatmap}
-          >
-            <Waves className="size-5" /> Intensidad
           </Button>
           {/* Centrar: oculto si el GPS confirmó al usuario fuera de Venezuela */}
           {!outsideVE && (
@@ -192,7 +184,7 @@ export function MapChrome({
         </div>
       )}
 
-      {/* Bottom-nav: Mapa · Reportes · [FAB Reportar] · Avisos · Más. Siempre
+      {/* Bottom-nav: Mapa · Reportes · [FAB Reportar] · Ayudar · Más. Siempre
           visible (también en el splash). El FAB sobresale por encima del riel. */}
       <nav className="fixed inset-x-0 bottom-0 z-[840] flex items-stretch border-t border-line bg-white pb-[env(safe-area-inset-bottom)] shadow-[0_-2px_12px_rgba(23,58,64,0.08)]">
         <NavBtn
@@ -221,11 +213,14 @@ export function MapChrome({
             Reportar
           </span>
         </div>
+        {/* "Ayudar" = tab del directorio de acopio/donar (panel bajo el nav,
+            igual que Reportes). Reemplazó a Avisos —oculto, difícil de mantener
+            automatizado, su código sigue vivo— y rebalancea el nav (2 + 2). */}
         <NavBtn
-          icon={Megaphone}
-          label="Avisos"
-          active={tab === 'avisos'}
-          onClick={() => onTab('avisos')}
+          icon={Heart}
+          label="Ayudar"
+          active={tab === 'ayudar'}
+          onClick={() => onTab('ayudar')}
         />
         <NavBtn
           icon={Menu}
