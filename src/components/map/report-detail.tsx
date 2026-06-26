@@ -1,14 +1,13 @@
 import { useEffect, useRef, useState } from 'react'
+import type { ReactNode } from 'react'
 import {
   BadgeCheck,
   Check,
   ChevronLeft,
   ExternalLink,
-  Flag,
   Link2,
   MessageCircle,
-  Navigation,
-  Phone,
+  MoreHorizontal,
   Send,
   Share2,
   Users,
@@ -19,7 +18,6 @@ import {
   fmtAge,
   fmtDist,
   haversine,
-  mapsDir,
   metaFields,
   phoneIntl,
   safeUrl,
@@ -31,6 +29,16 @@ import {
   flagReport,
 } from '../../reports/reports.functions'
 import type { ReportDetail } from '../../reports/reports.functions'
+import {
+  addComment,
+  fetchComments,
+  flagComment,
+} from '../../comments/comments.functions'
+import type { CommentRow } from '../../comments/comments.functions'
+import { MoreActionsDrawer } from './more-actions-drawer'
+
+// Tipos cuyo CTA de mapa es "Ver ubicación" (no se va "hacia" ellos).
+const DIR_LABEL_TYPES = ['danger', 'road', 'security', 'flood', 'missing', 'lostpet']
 
 // Un voto (confirmar/flag) por reporte por dispositivo. ponytail: guard
 // client-side sin auth — suficiente para MVP; subir a rate-limit por IP si hay
@@ -50,6 +58,24 @@ function addVote(id: string, k: keyof Vote) {
     localStorage.setItem('ave-voted', JSON.stringify(v))
   } catch {
     /* sin localStorage: el guard no persiste, no es crítico */
+  }
+}
+
+// Comentarios ya reportados por este dispositivo (guard anti-doble-flag).
+function cflags(): Record<string, boolean> {
+  try {
+    return JSON.parse(localStorage.getItem('ave-cflag') ?? '{}')
+  } catch {
+    return {}
+  }
+}
+function addCflag(id: string) {
+  const v = cflags()
+  v[id] = true
+  try {
+    localStorage.setItem('ave-cflag', JSON.stringify(v))
+  } catch {
+    /* idem: el guard no persiste, no es crítico */
   }
 }
 
@@ -225,6 +251,7 @@ export function ReportDetailScreen({
   const [confirmOpen, setConfirmOpen] = useState(false)
   const [flagOpen, setFlagOpen] = useState(false)
   const [appearOpen, setAppearOpen] = useState(false)
+  const [moreOpen, setMoreOpen] = useState(false)
 
   // Al cargar/cambiar de reporte, lee el estado de voto persistido.
   useEffect(() => {
@@ -294,18 +321,32 @@ export function ReportDetailScreen({
           report={report}
           user={user}
           confirmed={confirmed}
-          flagged={flagged}
           appeared={appeared}
           confirms={report.confirms + bump}
           onConfirm={() => setConfirmOpen(true)}
-          onFlag={() => setFlagOpen(true)}
           onAppear={() => setAppearOpen(true)}
           onShare={() => setShareOpen(true)}
+          onMore={() => setMoreOpen(true)}
         />
       )}
 
       {shareOpen && report && (
         <ShareSheet report={report} onClose={() => setShareOpen(false)} />
+      )}
+
+      {moreOpen && report && (
+        <MoreActionsDrawer
+          lat={report.lat}
+          lng={report.lng}
+          dirLabel={
+            DIR_LABEL_TYPES.includes(report.type) ? 'Ver ubicación' : 'Cómo llegar'
+          }
+          intl={phoneIntl(report.contact)}
+          showContact={canContact(report.type, report.contact)}
+          flagged={flagged}
+          onFlag={() => setFlagOpen(true)}
+          onClose={() => setMoreOpen(false)}
+        />
       )}
 
       {confirmOpen && (
@@ -343,26 +384,26 @@ function Body({
   report,
   user,
   confirmed,
-  flagged,
   appeared,
   confirms,
   onConfirm,
-  onFlag,
   onAppear,
   onShare,
+  onMore,
 }: {
   report: ReportDetail
   user: [number, number] | null
   confirmed: boolean
-  flagged: boolean
   appeared: boolean
   confirms: number
   onConfirm: () => void
-  onFlag: () => void
   onAppear: () => void
   onShare: () => void
+  onMore: () => void
 }) {
   const { type, meta } = report
+  const commentsRef = useRef<HTMLDivElement>(null)
+  const [commentCount, setCommentCount] = useState(0)
   const found = report.status === 'found'
   const t = typeOf(type)
   const photos = report.media.map((m) => m.url)
@@ -376,8 +417,6 @@ function Body({
       : type === 'lostpet' && meta.petName
         ? String(meta.petName)
         : t.label
-  const intl = phoneIntl(report.contact)
-  const showContact = canContact(type, report.contact)
   // Fuente externa saneada (safeUrl valida http(s) y bloquea credenciales); host
   // limpio para mostrarla dentro del badge de procedencia, comunidad o verificado.
   const src = safeUrl(report.url)
@@ -506,26 +545,6 @@ function Body({
           )}
         </div>
 
-        {/* Confirmaciones — solo en reportes no verificados y aún activos */}
-        {!report.verified && !found && (
-          <div className="mt-4 px-5">
-            <div className="flex items-center justify-between rounded-2xl bg-lagoon-wash px-4 py-3">
-              <span className="text-[14px] text-sea-ink">
-                <b className="tabular-nums">{confirms}</b>{' '}
-                {confirms === 1 ? 'persona confirma' : 'personas confirman'}
-              </span>
-              <button
-                type="button"
-                onClick={onConfirm}
-                disabled={confirmed}
-                className="rounded-full bg-lagoon px-4 py-2 text-[13px] font-bold text-white disabled:bg-lagoon-disabled"
-              >
-                {confirmed ? '✓ Confirmado' : 'Confirmar'}
-              </button>
-            </div>
-          </div>
-        )}
-
         {/* "Ya apareció" — solo desaparecidos de la comunidad. A los 3 votos el
             aviso se oculta del mapa (el umbral vive en appearReport). */}
         {type === 'missing' && !report.verified && !found && (
@@ -546,70 +565,49 @@ function Body({
           </div>
         )}
 
-        {/* Reportar abuso */}
-        <div className="mt-4 mb-2 px-5">
-          <button
-            type="button"
-            onClick={onFlag}
-            disabled={flagged}
-            className="inline-flex items-center gap-1.5 text-[13px] text-ink-faint disabled:opacity-60"
-          >
-            <Flag className="size-3.5" />
-            {flagged ? 'Reporte enviado' : 'Reportar como falso o inapropiado'}
-          </button>
+        {/* Comentarios de la comunidad */}
+        <div ref={commentsRef} className="mt-6 px-5 pb-2">
+          <CommentsSection reportId={report.id} onCount={setCommentCount} />
         </div>
       </div>
 
-      {/* Footer sticky: acciones por tipo */}
+      {/* Footer SOSAFE: Lo confirmo · Comentarios · Compartir · Más. Las acciones
+          de contacto (Llamar/WhatsApp/Cómo llegar) y Reportar viven en el "Más". */}
       <div
-        className="border-t border-surface-muted px-5 pt-3"
-        style={{ paddingBottom: 'max(20px, env(safe-area-inset-bottom))' }}
+        className="flex border-t border-surface-muted px-2 pt-1.5"
+        style={{ paddingBottom: 'max(12px, env(safe-area-inset-bottom))' }}
       >
-        {showContact && intl && (
-          <div className="mb-3 flex gap-3">
-            <a
-              href={`tel:+${intl}`}
-              className="flex h-[52px] flex-1 items-center justify-center gap-2 rounded-2xl bg-lagoon-wash text-[16px] font-bold text-lagoon-ink"
-            >
-              <Phone className="size-5" /> Llamar
-            </a>
-            <a
-              href={`https://wa.me/${intl}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex h-[52px] flex-1 items-center justify-center gap-2 rounded-2xl bg-success-wash text-[16px] font-bold text-success"
-            >
-              <MessageCircle className="size-5" /> WhatsApp
-            </a>
-          </div>
+        {!report.verified && !found && (
+          <FooterAction
+            icon={<Check className="size-[22px]" />}
+            label={confirmed ? 'Confirmado' : 'Lo confirmo'}
+            count={confirms}
+            active={confirmed}
+            disabled={confirmed}
+            onClick={onConfirm}
+          />
         )}
-        {/* Compartir = acción principal (difundir un reporte vale más que llegar
-            a él, sobre todo en desaparecidos) → filled. "Cómo llegar" baja a secundario. */}
-        <button
-          type="button"
+        <FooterAction
+          icon={<MessageCircle className="size-[22px]" />}
+          label="Comentarios"
+          count={commentCount}
+          onClick={() =>
+            commentsRef.current?.scrollIntoView({
+              behavior: 'smooth',
+              block: 'start',
+            })
+          }
+        />
+        <FooterAction
+          icon={<Share2 className="size-[22px]" />}
+          label="Compartir"
           onClick={onShare}
-          className="mb-3 flex h-[52px] w-full items-center justify-center gap-2 rounded-2xl bg-lagoon text-[16px] font-bold text-white"
-        >
-          <Share2 className="size-5" /> Compartir
-        </button>
-        <a
-          href={mapsDir(report.lat, report.lng)}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="flex h-[52px] w-full items-center justify-center gap-2 rounded-2xl border border-line text-[16px] font-bold text-sea-ink"
-        >
-          <Navigation className="size-5" />
-          {[
-            'danger',
-            'road',
-            'security',
-            'flood',
-            'missing',
-            'lostpet',
-          ].includes(type)
-            ? 'Ver ubicación'
-            : 'Cómo llegar'}
-        </a>
+        />
+        <FooterAction
+          icon={<MoreHorizontal className="size-[22px]" />}
+          label="Más"
+          onClick={onMore}
+        />
       </div>
     </>
   )
@@ -754,11 +752,9 @@ function ConfirmDialog({
         onClick={(e) => e.stopPropagation()}
         className="w-full rounded-t-2xl bg-white p-5 pb-[calc(20px+env(safe-area-inset-bottom))] sm:max-w-sm sm:rounded-2xl sm:pb-5"
       >
-        <h2 className="text-[18px] font-bold text-ink">
-          ¿Confirmar este reporte?
-        </h2>
+        <h2 className="text-[18px] font-bold text-ink">¿Lo confirmas?</h2>
         <p className="mt-2 text-[14px] leading-relaxed text-ink-muted">
-          Confirma solo si viste la situación o sabes que es real. Así otros
+          Confírmalo solo si viste la situación o sabes que es real. Así otros
           saben en qué pueden confiar.
         </p>
         <div className="mt-5 flex gap-3">
@@ -774,7 +770,7 @@ function ConfirmDialog({
             onClick={onConfirm}
             className="h-[48px] flex-1 rounded-2xl bg-lagoon text-[15px] font-bold text-white"
           >
-            Confirmar
+            Lo confirmo
           </button>
         </div>
       </div>
@@ -828,7 +824,7 @@ function AppearDialog({
 }
 
 // Reportar abuso con motivo opcional. Full-screen en mobile (espacio para teclado),
-// card en desktop. El motivo se guarda como comentario de moderación.
+// card en desktop. El motivo se audita en moderation_events (flagReport).
 function FlagDialog({
   onCancel,
   onSubmit,
@@ -884,5 +880,196 @@ function FlagDialog({
         </div>
       </div>
     </div>
+  )
+}
+
+// Acción del footer SOSAFE: ícono + label, con badge de conteo opcional. `active`
+// = la acción ya ejecutada (Confirmado) → color de marca.
+function FooterAction({
+  icon,
+  label,
+  count,
+  active,
+  disabled,
+  onClick,
+}: {
+  icon: ReactNode
+  label: string
+  count?: number
+  active?: boolean
+  disabled?: boolean
+  onClick: () => void
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      className={`flex flex-1 flex-col items-center gap-1 rounded-xl py-1.5 ${
+        active ? 'text-lagoon' : 'text-sea-ink-soft'
+      }`}
+    >
+      <span className="relative">
+        {icon}
+        {count != null && count > 0 && (
+          <span className="absolute -top-1.5 -right-2.5 min-w-[16px] rounded-full bg-lagoon px-1 text-center text-[10px] leading-[16px] font-bold text-white tabular-nums">
+            {count > 99 ? '99+' : count}
+          </span>
+        )}
+      </span>
+      <span className="text-[11px] font-semibold leading-none">{label}</span>
+    </button>
+  )
+}
+
+// Comentarios de la comunidad: lista + composer. Auto-publican; cada uno se puede
+// reportar (su "⋯" → flagComment, oculto a los 5 flags server-side). El nombre es
+// libre/opcional; React escapa el texto al render (no es HTML).
+function CommentsSection({
+  reportId,
+  onCount,
+}: {
+  reportId: string
+  onCount: (n: number) => void
+}) {
+  const [list, setList] = useState<CommentRow[]>([])
+  const [loading, setLoading] = useState(true)
+  const [text, setText] = useState('')
+  const [name, setName] = useState('')
+  const [sending, setSending] = useState(false)
+  const [err, setErr] = useState<string | null>(null)
+  const [flagged, setFlagged] = useState<Record<string, boolean>>({})
+
+  useEffect(() => {
+    let alive = true
+    setLoading(true)
+    fetchComments({ data: { reportId } })
+      .then((rows) => {
+        if (!alive) return
+        setList(rows)
+        setFlagged(cflags())
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (alive) setLoading(false)
+      })
+    return () => {
+      alive = false
+    }
+  }, [reportId])
+
+  // Reporta el conteo al footer tras el commit (no durante el render del padre).
+  useEffect(() => {
+    onCount(list.length)
+  }, [list.length, onCount])
+
+  const submit = async () => {
+    const t = text.trim()
+    if (!t || sending) return
+    setSending(true)
+    setErr(null)
+    try {
+      const res = await addComment({
+        data: { reportId, text: t, authorName: name.trim() || undefined },
+      })
+      if (res.ok) {
+        setList((l) => [res.comment, ...l])
+        setText('')
+      } else {
+        setErr(
+          res.reason === 'rate'
+            ? 'Espera unos segundos antes de comentar de nuevo.'
+            : res.reason === 'missing'
+              ? 'Este reporte ya no está disponible.'
+              : 'Escribe un comentario.',
+        )
+      }
+    } catch {
+      setErr('No se pudo enviar. Revisa tu conexión.')
+    } finally {
+      setSending(false)
+    }
+  }
+
+  const flag = (id: string) => {
+    if (flagged[id]) return
+    setFlagged((f) => ({ ...f, [id]: true }))
+    addCflag(id)
+    flagComment({ data: { id } }).catch(() => {})
+  }
+
+  return (
+    <section>
+      <h2 className="mb-3 text-[15px] font-bold text-ink">
+        Comentarios{list.length ? ` · ${list.length}` : ''}
+      </h2>
+
+      <div className="rounded-2xl border border-line p-2.5">
+        <input
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          maxLength={40}
+          placeholder="Tu nombre (opcional)"
+          className="mb-2 w-full bg-transparent px-1.5 text-[13px] text-ink outline-none placeholder:text-ink-faint"
+        />
+        <div className="flex items-end gap-2">
+          <textarea
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            maxLength={1000}
+            rows={1}
+            placeholder="Escribe un comentario…"
+            className="max-h-32 min-h-[40px] flex-1 resize-none rounded-xl bg-surface-muted px-3 py-2.5 text-[14px] text-ink outline-none placeholder:text-ink-faint"
+          />
+          <button
+            type="button"
+            onClick={submit}
+            disabled={!text.trim() || sending}
+            aria-label="Enviar comentario"
+            className="grid size-[40px] flex-none place-items-center rounded-full bg-lagoon text-white disabled:bg-lagoon-disabled"
+          >
+            <Send className="size-[18px]" />
+          </button>
+        </div>
+        {err && <p className="mt-2 px-1 text-[12px] text-danger">{err}</p>}
+      </div>
+
+      {loading ? (
+        <p className="mt-4 text-[13px] text-ink-muted">Cargando comentarios…</p>
+      ) : list.length === 0 ? (
+        <p className="mt-4 text-[13px] text-ink-muted">
+          Sé el primero en comentar.
+        </p>
+      ) : (
+        <ul className="mt-4 space-y-4">
+          {list.map((c) => (
+            <li key={c.id} className="flex gap-3">
+              <div className="min-w-0 flex-1">
+                <p className="text-[13px]">
+                  <b className="font-semibold text-ink">
+                    {c.authorName || 'Anónimo'}
+                  </b>
+                  <span className="ml-2 text-ink-faint">
+                    {fmtAge(c.createdAt)}
+                  </span>
+                </p>
+                <p className="mt-0.5 text-[14px] leading-relaxed whitespace-pre-wrap text-ink-body">
+                  {c.text}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => flag(c.id)}
+                disabled={!!flagged[c.id]}
+                aria-label="Reportar comentario"
+                className="-mt-1 size-7 flex-none rounded-full text-ink-faint disabled:opacity-50"
+              >
+                <MoreHorizontal className="mx-auto size-[18px]" />
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
   )
 }

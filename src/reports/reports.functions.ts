@@ -1,35 +1,10 @@
 import { createServerFn } from '@tanstack/react-start'
-import { getRequestHeader, getRequestIP } from '@tanstack/react-start/server'
-import { env } from 'cloudflare:workers'
 import { and, asc, desc, eq, gte, inArray, lt, lte, ne, or, sql } from 'drizzle-orm'
 import { getDb } from '../db'
-import { comments, media, reportConfirms, reports } from '../db/schema'
+import { media, reportConfirms, reports } from '../db/schema'
+import { logModeration } from '../moderation/moderation'
+import { clientIpHash, clientUa } from '../server/req'
 import { TYPES, safeUrl } from './reports'
-
-function clientIp(): string {
-  // CF-Connecting-IP en Workers; getRequestIP() en dev local
-  return getRequestHeader('cf-connecting-ip') ?? getRequestIP() ?? ''
-}
-
-// Nunca persistimos la IP cruda: guardamos un SHA-256 con pepper de env. Sirve
-// igual para dedupe/self-confirm (hash==hash) pero no es PII reversible. El salt
-// vive en el secret IP_SALT (wrangler); fallback fijo solo para dev/local.
-async function clientIpHash(): Promise<string> {
-  const ip = clientIp()
-  if (!ip) return ''
-  const salt = (env as { IP_SALT?: string }).IP_SALT ?? 'ave-dev-salt'
-  const buf = await crypto.subtle.digest(
-    'SHA-256',
-    new TextEncoder().encode(salt + ip),
-  )
-  return [...new Uint8Array(buf)]
-    .map((b) => b.toString(16).padStart(2, '0'))
-    .join('')
-}
-
-function clientUa(): string {
-  return (getRequestHeader('user-agent') ?? '').slice(0, 250)
-}
 
 // ponytail: dato viejo en emergencia = peligroso. Filtramos a 48h (mvp.md).
 // Excepción: desaparecidos (missing) y mascotas perdidas (lostpet) son registro
@@ -545,7 +520,7 @@ const FLAG_HIDE = 5
 export const flagReport = createServerFn({ method: 'POST' })
   .validator((d: { id: string; reason?: string }) => ({
     id: String(d.id),
-    reason: d.reason ? String(d.reason) : undefined,
+    reason: d.reason ? String(d.reason).slice(0, 500) : undefined,
   }))
   .handler(async ({ data }) => {
     const db = getDb()
@@ -556,13 +531,13 @@ export const flagReport = createServerFn({ method: 'POST' })
         status: sql`case when ${reports.flags} + 1 >= ${FLAG_HIDE} then 'hidden' else ${reports.status} end`,
       })
       .where(eq(reports.id, data.id))
-    // ponytail: el motivo del flag se guarda en `comments` (prefijo [reporte])
-    // hasta que exista /admin con su propia tabla de moderación.
-    const reason = data.reason?.trim()
-    if (reason)
-      await db
-        .insert(comments)
-        .values({ reportId: data.id, text: `[reporte] ${reason}` })
+    // El motivo se audita en moderation_events (antes: comentario '[reporte] …').
+    await logModeration({
+      entityType: 'report',
+      entityId: data.id,
+      action: 'flag',
+      reason: data.reason,
+    })
   })
 
 // "Ya apareció": solo para desaparecidos de la comunidad. Auto-oculta a los 3

@@ -55,16 +55,49 @@ export const reports = sqliteTable(
   ],
 )
 
-export const comments = sqliteTable('comments', {
-  id: text('id')
-    .primaryKey()
-    .$defaultFn(() => crypto.randomUUID()),
-  reportId: text('report_id')
-    .notNull()
-    .references(() => reports.id),
-  text: text('text').notNull(),
-  ...timestamps(),
-})
+// Comentarios de la comunidad en un reporte. Auto-publican (`status='visible'`)
+// y se ocultan a los 5 flags (mismo patrón que flagReport). `authorName` es libre
+// y opcional (anónimo si vacío) → texto sin verificar, se escapa al render.
+// `ipHash` = SHA-256(salt+ip), no PII, solo para throttle anti-spam.
+export const comments = sqliteTable(
+  'comments',
+  {
+    id: text('id')
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    reportId: text('report_id')
+      .notNull()
+      .references(() => reports.id),
+    text: text('text').notNull(),
+    authorName: text('author_name'), // nombre libre opcional; anónimo si vacío
+    status: text('status').notNull().default('visible'), // visible | hidden
+    flags: integer('flags').notNull().default(0),
+    ipHash: text('ip_hash'), // throttle/dedupe; no PII
+    ...timestamps(),
+  },
+  (t) => [index('comments_report').on(t.reportId, t.createdAt)],
+)
+
+// Auditoría de moderación: flag/hide/approve/reject sobre cualquier entidad.
+// Reemplaza el hack de guardar motivos de flag como comentarios '[reporte] …'.
+export const moderationEvents = sqliteTable(
+  'moderation_events',
+  {
+    id: text('id')
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    entityType: text('entity_type').notNull(), // report | comment | contact | announcement | aid_center
+    entityId: text('entity_id').notNull(),
+    action: text('action').notNull(), // flag | hide | approve | reject
+    reason: text('reason'),
+    ipHash: text('ip_hash'),
+    uaHash: text('ua_hash'),
+    createdAt: integer('created_at', { mode: 'timestamp' })
+      .notNull()
+      .default(sql`(unixepoch())`),
+  },
+  (t) => [index('moderation_events_entity').on(t.entityType, t.entityId)],
+)
 
 // Contactos por zona. `source='oficial'` = verificado con sourceUrl;
 // `source='comunidad'` = sugerido por usuario, entra pending hasta aprobarse.
@@ -156,6 +189,7 @@ export const quakeSnapshot = sqliteTable('quake_snapshot', {
 
 export type Report = typeof reports.$inferSelect
 export type Comment = typeof comments.$inferSelect
+export type ModerationEvent = typeof moderationEvents.$inferSelect
 export type Contact = typeof contacts.$inferSelect
 export type Suggestion = typeof suggestions.$inferSelect
 export type ReportConfirm = typeof reportConfirms.$inferSelect
