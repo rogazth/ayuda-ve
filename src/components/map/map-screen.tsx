@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { memo, useCallback, useEffect, useRef, useState } from 'react'
 import {
   MapContainer,
   Marker,
@@ -176,18 +176,27 @@ function seedCenter(): [number, number] {
   return QUAKE_ZONE
 }
 
+// Icono cacheado por (tipo, confirms): el divIcon es config inmutable y se
+// comparte entre marcadores sin problema. Así 5000 pines reusan ~una docena de
+// iconos en vez de reconstruir el string HTML en cada render.
+const iconCache = new Map<string, L.DivIcon>()
 function pinIcon(p: Pin) {
+  const key = `${p.type}|${p.confirms}`
+  const cached = iconCache.get(key)
+  if (cached) return cached
   const t = typeOf(p.type)
   const cnt =
     p.confirms > 0
       ? `<span class="absolute -top-[6px] -right-[8px] bg-[#1a1c1e] text-white text-[11px] font-bold min-w-[19px] h-[19px] rounded-[10px] grid place-items-center px-[5px] border-2 border-white">${p.confirms}</span>`
       : ''
-  return L.divIcon({
+  const icon = L.divIcon({
     className: '!bg-none !border-none',
     html: `<div class="relative w-[38px] h-[38px] [filter:drop-shadow(0_4px_4px_rgba(0,0,0,0.28))]"><div class="w-[38px] h-[38px] rounded-[50%_50%_50%_0] -rotate-45 grid place-items-center border-[2.5px] border-white [&_svg]:rotate-45 [&_svg]:w-[19px] [&_svg]:h-[19px]" style="background:${t.color}"><svg viewBox="0 0 24 24">${t.svg}</svg></div>${cnt}</div>`,
     iconSize: [38, 38],
     iconAnchor: [19, 40],
   })
+  iconCache.set(key, icon)
+  return icon
 }
 
 // Icono de cluster con la marca (teal oscuro), no el skin azul por defecto de
@@ -311,16 +320,54 @@ function MapController({
   return null
 }
 
-export default function MapScreen() {
+// Capa de pines aislada y memoizada: solo se re-renderiza cuando cambian los
+// pines, no cuando togglea satélite/intensidad u otro estado de MapScreen. Antes,
+// cada toggle reconciliaba los hasta 5000 <Marker>.
+const PinsLayer = memo(function PinsLayer({
+  pins,
+  onSelect,
+}: {
+  pins: Pin[]
+  onSelect: (id: string) => void
+}) {
+  return (
+    <MarkerClusterGroup
+      maxClusterRadius={50}
+      showCoverageOnHover={false}
+      chunkedLoading
+      iconCreateFunction={clusterIcon}
+    >
+      {pins.map((p) => (
+        <Marker
+          key={p.id}
+          position={[p.lat, p.lng]}
+          icon={pinIcon(p)}
+          eventHandlers={{ click: () => onSelect(p.id) }}
+        />
+      ))}
+    </MarkerClusterGroup>
+  )
+})
+
+export default function MapScreen({
+  initialPins = [],
+  initialQuakes = null,
+}: {
+  initialPins?: Pin[]
+  initialQuakes?: QuakeData | null
+}) {
   // Sin modos. El mapa muestra siempre el terremoto (epicentro + heatmap) y los
   // pines de reporte. Encima, tres cosas independientes: el banner abre el
   // boletín (infoOpen), "Intensidad" prende/apaga el heatmap, y "Reportar"
   // siempre disponible. Ayuda y Acerca de son dialogs aparte.
   const [infoOpen, setInfoOpen] = useState(false)
   const [heatmap, setHeatmap] = useState(true)
-  const [pins, setPins] = useState<Pin[]>([])
+  // initialPins/initialQuakes vienen del loader SSR → pines + heatmap se pintan
+  // al montar el mapa, sin esperar el round-trip. El bbox del viewport reemplaza
+  // los pines apenas resuelve; el poll de 60s refresca quakes.
+  const [pins, setPins] = useState<Pin[]>(initialPins)
   const [user, setUser] = useState<[number, number] | null>(null)
-  const [quakes, setQuakes] = useState<QuakeData | null>(null)
+  const [quakes, setQuakes] = useState<QuakeData | null>(initialQuakes)
   const [helpOpen, setHelpOpen] = useState(false)
   const [aboutOpen, setAboutOpen] = useState(false)
   const [userEstado, setUserEstado] = useState<string | null>(null)
@@ -360,6 +407,9 @@ export default function MapScreen() {
     setSelectedId(null)
     setRefreshKey((k) => k + 1)
   }, [])
+
+  // Estable para que PinsLayer (memo) no se re-renderice por identidad del handler.
+  const onSelect = useCallback((id: string) => setSelectedId(id), [])
 
   // Carga siempre-activa: el banner necesita el sismo actual aunque estés en
   // Reportes. Refresco 60s, barato por la caché de borde.
@@ -498,21 +548,7 @@ export default function MapScreen() {
           }}
           refreshKey={refreshKey}
         />
-        <MarkerClusterGroup
-          maxClusterRadius={50}
-          showCoverageOnHover={false}
-          chunkedLoading
-          iconCreateFunction={clusterIcon}
-        >
-          {pins.map((p) => (
-            <Marker
-              key={p.id}
-              position={[p.lat, p.lng]}
-              icon={pinIcon(p)}
-              eventHandlers={{ click: () => setSelectedId(p.id) }}
-            />
-          ))}
-        </MarkerClusterGroup>
+        <PinsLayer pins={pins} onSelect={onSelect} />
         {quakes && (
           <>
             {heatmap && quakes.shakemap != null && (

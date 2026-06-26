@@ -26,6 +26,61 @@ const SECURITY_TTL_MS = 12 * 60 * 60 * 1000
 
 export type Bounds = { s: number; n: number; w: number; e: number }
 
+// Columnas mínimas del pin: mismo payload para el bbox y el seed.
+const pinCols = {
+  id: reports.id,
+  type: reports.type,
+  title: reports.title,
+  lat: reports.lat,
+  lng: reports.lng,
+  confirms: reports.confirms,
+  createdAt: reports.createdAt,
+}
+
+// Reglas de visibilidad compartidas (status + frescura). missing/lostpet exentos
+// del corte de 48h (registro de pie); las alertas de seguridad expiran en 12h.
+function visibleFreshConds() {
+  const cutoff = new Date(Date.now() - FRESH_MS)
+  const securityCutoff = new Date(Date.now() - SECURITY_TTL_MS)
+  return [
+    eq(reports.status, 'visible'),
+    or(inArray(reports.type, STANDING_TYPES), gte(reports.createdAt, cutoff)),
+    or(ne(reports.type, 'security'), gte(reports.createdAt, securityCutoff)),
+  ]
+}
+
+// Cache de borde (Cloudflare Cache API): la primera petición computa y guarda;
+// el resto del borde responde sin tocar D1 hasta que expira el TTL. Esto colapsa
+// los pans repetidos y el poll de todos los usuarios a ~1 lectura D1 por celda y
+// TTL. ponytail: degrada a compute() si el runtime no expone caches (tests/SSR).
+async function edgeCached<T>(
+  key: string,
+  ttlSec: number,
+  compute: () => Promise<T>,
+): Promise<T> {
+  try {
+    const cache = (globalThis as unknown as { caches?: { default?: Cache } })
+      .caches?.default
+    if (!cache) return await compute()
+    const req = new Request(`https://edge.ayudave.com/${key}`)
+    const hit = await cache.match(req)
+    if (hit) return await hit.json()
+    const data = await compute()
+    await cache.put(
+      req,
+      new Response(JSON.stringify(data), {
+        headers: {
+          'content-type': 'application/json',
+          'cache-control': `max-age=${ttlSec}`,
+        },
+      }),
+    )
+    return data
+  } catch {
+    return await compute()
+  }
+}
+
 // Pins por viewport: payload mínimo, índice (lat,lng) hace el BETWEEN barato.
 export const fetchReportsInBounds = createServerFn({ method: 'GET' })
   .validator(
@@ -37,48 +92,60 @@ export const fetchReportsInBounds = createServerFn({ method: 'GET' })
     }),
   )
   .handler(async ({ data }) => {
-    const db = getDb()
-    const cutoff = new Date(Date.now() - FRESH_MS)
-    const securityCutoff = new Date(Date.now() - SECURITY_TTL_MS)
-    const rows = await db
-      .select({
-        id: reports.id,
-        type: reports.type,
-        title: reports.title,
-        lat: reports.lat,
-        lng: reports.lng,
-        confirms: reports.confirms,
-        createdAt: reports.createdAt,
-      })
-      .from(reports)
-      .where(
-        and(
-          eq(reports.status, 'visible'),
-          gte(reports.lat, data.s),
-          lte(reports.lat, data.n),
-          gte(reports.lng, data.w),
-          lte(reports.lng, data.e),
-          // missing/lostpet exentos del corte de 48h (registro de pie); el resto sí caduca
-          or(
-            inArray(reports.type, STANDING_TYPES),
-            gte(reports.createdAt, cutoff),
-          ),
-          // alertas de seguridad expiran en 12h
-          or(
-            ne(reports.type, 'security'),
-            gte(reports.createdAt, securityCutoff),
-          ),
-        ),
-      )
-      .orderBy(desc(reports.createdAt))
-      // El mapa clusteriza (MarkerClusterGroup), así que miles de pines no lo
-      // matan; el bbox del viewport ya acota. 200 dejaba fuera casi todo el
-      // backlog. ponytail: cap cliente — si zoomed-out con ~43k se pone lento,
-      // el upgrade es clustering server-side por tile, no subir más este número.
-      .limit(5000)
+    // Snap del bbox a grilla 0.1° hacia afuera: pans cercanos comparten clave de
+    // cache y el área cacheada siempre cubre el viewport real. ponytail: trae
+    // algún pin fuera de pantalla, inofensivo (el cluster lo recorta).
+    const G = 0.1
+    const s = Math.floor(data.s / G) * G
+    const n = Math.ceil(data.n / G) * G
+    const w = Math.floor(data.w / G) * G
+    const e = Math.ceil(data.e / G) * G
+    const key = `bbox-${s.toFixed(1)}_${n.toFixed(1)}_${w.toFixed(1)}_${e.toFixed(1)}`
 
-    return rows.map((r) => ({ ...r, createdAt: r.createdAt.getTime() }))
+    // TTL 30s: el poll (30s) puede ver un reporte nuevo con hasta ~30s de retraso
+    // (el beep tarda un ciclo). ponytail: si urge inmediatez, poll incremental
+    // por created_at en vez de bajar este TTL.
+    return edgeCached(key, 30, async () => {
+      const db = getDb()
+      const rows = await db
+        .select(pinCols)
+        .from(reports)
+        .where(
+          and(
+            ...visibleFreshConds(),
+            gte(reports.lat, s),
+            lte(reports.lat, n),
+            gte(reports.lng, w),
+            lte(reports.lng, e),
+          ),
+        )
+        .orderBy(desc(reports.createdAt))
+        // El mapa clusteriza (MarkerClusterGroup), así que miles de pines no lo
+        // matan; el bbox del viewport ya acota. ponytail: cap cliente — si
+        // zoomed-out con ~50k+ se pone lento, el upgrade es clustering
+        // server-side por tile (burbujas), no subir más este número.
+        .limit(5000)
+      return rows.map((r) => ({ ...r, createdAt: r.createdAt.getTime() }))
+    })
   })
+
+// Seed para el primer paint: los últimos ~200 reportes visibles, sin bbox. Va en
+// el loader SSR del index → viajan en el HTML inicial, así el mapa monta con
+// pines + heatmap sin esperar un round-trip. Cacheado en el borde (mismo payload
+// para todos). El bbox del viewport los reemplaza apenas resuelve.
+export const fetchSeedReports = createServerFn({ method: 'GET' }).handler(
+  async () =>
+    edgeCached('seed-v1', 30, async () => {
+      const db = getDb()
+      const rows = await db
+        .select(pinCols)
+        .from(reports)
+        .where(and(...visibleFreshConds()))
+        .orderBy(desc(reports.createdAt))
+        .limit(200)
+      return rows.map((r) => ({ ...r, createdAt: r.createdAt.getTime() }))
+    }),
+)
 
 type NewReport = {
   type: string
