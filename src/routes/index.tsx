@@ -3,8 +3,6 @@ import { createServerFn } from '@tanstack/react-start'
 import { Suspense, lazy, useEffect, useState } from 'react'
 import { fetchReport, fetchSeedReports } from '../reports/reports.functions'
 import type { ReportDetail } from '../reports/reports.functions'
-import { fetchQuakes } from '../quakes/quakes.functions'
-import type { QuakeData } from '../quakes/quakes.functions'
 import type { Pin } from '../components/map/types'
 import { typeOf } from '../reports/reports'
 
@@ -42,21 +40,16 @@ export const Route = createFileRoute('/')({
     r: typeof s.r === 'string' ? s.r : undefined,
   }),
   loaderDeps: ({ search }) => ({ r: search.r }),
-  loader: async ({
-    deps,
-  }): Promise<{ og: Og | null; seed: Pin[]; quakes: QuakeData | null }> => {
-    // seed (D1 propio, cacheado) + quakes (con timeout: USGS frío no debe colgar
-    // el SSR; si no llega a tiempo el cliente lo carga). Van en el HTML para que
-    // el mapa monte con pines + heatmap sin round-trip.
-    const [seed, quakes, og] = await Promise.all([
+  loader: async ({ deps }): Promise<{ og: Og | null; seed: Pin[] }> => {
+    // seed (D1 propio, cacheado) va en el HTML para que el mapa monte con pines
+    // sin round-trip. Quakes NO va aquí: su flujo son varios fetch a USGS
+    // (lista→detalle→shakemap) que tardan >1s y colgaban el SSR para terminar en
+    // null igual; lo carga el cliente al montar (cacheado 60s en el borde).
+    const [seed, og] = await Promise.all([
       fetchSeedReports().catch(() => [] as Pin[]),
-      Promise.race([
-        fetchQuakes(),
-        new Promise<null>((res) => setTimeout(() => res(null), 1200)),
-      ]).catch(() => null),
       deps.r ? fetchOg({ data: deps.r }).catch(() => null) : Promise.resolve(null),
     ])
-    return { og, seed, quakes }
+    return { og, seed }
   },
   head: ({ loaderData }) => {
     const og = loaderData?.og
@@ -83,13 +76,13 @@ export const Route = createFileRoute('/')({
 const MapScreen = lazy(() => import('../components/map/map-screen'))
 
 function App() {
-  const { seed, quakes } = Route.useLoaderData()
+  const { seed } = Route.useLoaderData()
   const [ready, setReady] = useState(false)
   useEffect(() => setReady(true), [])
   if (!ready) return <Splash />
   return (
     <Suspense fallback={<Splash />}>
-      <MapScreen initialPins={seed} initialQuakes={quakes} />
+      <MapScreen initialPins={seed} />
     </Suspense>
   )
 }
