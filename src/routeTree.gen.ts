@@ -14,6 +14,7 @@ import { Route as PersonasDesaparecidasRouteImport } from './routes/personas-des
 import { Route as NumerosEmergenciaVenezuelaRouteImport } from './routes/numeros-emergencia-venezuela'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as MediaSplatRouteImport } from './routes/media.$'
+import { Route as InternalQuakeSnapshotRouteImport } from './routes/internal.quake-snapshot'
 import { Route as InternalQuakeImageRouteImport } from './routes/internal.quake-image'
 import { Route as InternalIngestRouteImport } from './routes/internal.ingest'
 import { Route as ApiReportsIdPhotosRouteImport } from './routes/api.reports.$id.photos'
@@ -44,6 +45,11 @@ const MediaSplatRoute = MediaSplatRouteImport.update({
   path: '/media/$',
   getParentRoute: () => rootRouteImport,
 } as any)
+const InternalQuakeSnapshotRoute = InternalQuakeSnapshotRouteImport.update({
+  id: '/internal/quake-snapshot',
+  path: '/internal/quake-snapshot',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const InternalQuakeImageRoute = InternalQuakeImageRouteImport.update({
   id: '/internal/quake-image',
   path: '/internal/quake-image',
@@ -67,6 +73,7 @@ export interface FileRoutesByFullPath {
   '/sitemap.xml': typeof SitemapDotxmlRoute
   '/internal/ingest': typeof InternalIngestRoute
   '/internal/quake-image': typeof InternalQuakeImageRoute
+  '/internal/quake-snapshot': typeof InternalQuakeSnapshotRoute
   '/media/$': typeof MediaSplatRoute
   '/api/reports/$id/photos': typeof ApiReportsIdPhotosRoute
 }
@@ -77,6 +84,7 @@ export interface FileRoutesByTo {
   '/sitemap.xml': typeof SitemapDotxmlRoute
   '/internal/ingest': typeof InternalIngestRoute
   '/internal/quake-image': typeof InternalQuakeImageRoute
+  '/internal/quake-snapshot': typeof InternalQuakeSnapshotRoute
   '/media/$': typeof MediaSplatRoute
   '/api/reports/$id/photos': typeof ApiReportsIdPhotosRoute
 }
@@ -88,6 +96,7 @@ export interface FileRoutesById {
   '/sitemap.xml': typeof SitemapDotxmlRoute
   '/internal/ingest': typeof InternalIngestRoute
   '/internal/quake-image': typeof InternalQuakeImageRoute
+  '/internal/quake-snapshot': typeof InternalQuakeSnapshotRoute
   '/media/$': typeof MediaSplatRoute
   '/api/reports/$id/photos': typeof ApiReportsIdPhotosRoute
 }
@@ -100,6 +109,7 @@ export interface FileRouteTypes {
     | '/sitemap.xml'
     | '/internal/ingest'
     | '/internal/quake-image'
+    | '/internal/quake-snapshot'
     | '/media/$'
     | '/api/reports/$id/photos'
   fileRoutesByTo: FileRoutesByTo
@@ -110,6 +120,7 @@ export interface FileRouteTypes {
     | '/sitemap.xml'
     | '/internal/ingest'
     | '/internal/quake-image'
+    | '/internal/quake-snapshot'
     | '/media/$'
     | '/api/reports/$id/photos'
   id:
@@ -120,6 +131,7 @@ export interface FileRouteTypes {
     | '/sitemap.xml'
     | '/internal/ingest'
     | '/internal/quake-image'
+    | '/internal/quake-snapshot'
     | '/media/$'
     | '/api/reports/$id/photos'
   fileRoutesById: FileRoutesById
@@ -131,6 +143,7 @@ export interface RootRouteChildren {
   SitemapDotxmlRoute: typeof SitemapDotxmlRoute
   InternalIngestRoute: typeof InternalIngestRoute
   InternalQuakeImageRoute: typeof InternalQuakeImageRoute
+  InternalQuakeSnapshotRoute: typeof InternalQuakeSnapshotRoute
   MediaSplatRoute: typeof MediaSplatRoute
   ApiReportsIdPhotosRoute: typeof ApiReportsIdPhotosRoute
 }
@@ -172,6 +185,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof MediaSplatRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/internal/quake-snapshot': {
+      id: '/internal/quake-snapshot'
+      path: '/internal/quake-snapshot'
+      fullPath: '/internal/quake-snapshot'
+      preLoaderRoute: typeof InternalQuakeSnapshotRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/internal/quake-image': {
       id: '/internal/quake-image'
       path: '/internal/quake-image'
@@ -203,6 +223,7 @@ const rootRouteChildren: RootRouteChildren = {
   SitemapDotxmlRoute: SitemapDotxmlRoute,
   InternalIngestRoute: InternalIngestRoute,
   InternalQuakeImageRoute: InternalQuakeImageRoute,
+  InternalQuakeSnapshotRoute: InternalQuakeSnapshotRoute,
   MediaSplatRoute: MediaSplatRoute,
   ApiReportsIdPhotosRoute: ApiReportsIdPhotosRoute,
 }
