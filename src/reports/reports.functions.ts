@@ -2,7 +2,8 @@ import { createServerFn } from '@tanstack/react-start'
 import { and, asc, desc, eq, gte, inArray, lt, lte, ne, or, sql } from 'drizzle-orm'
 import { getDb } from '../db'
 import { media, reportConfirms, reports } from '../db/schema'
-import { clientIpHash, clientUa } from '../server/req'
+import { clientCountry, clientIpHash, clientUa } from '../server/req'
+import { countryFlag, isoForCountry } from '../geo/countries'
 import { TYPES, safeUrl } from './reports'
 
 // Decisión PO: el mapa muestra TODO lo visible, sin corte de antigüedad. La
@@ -16,7 +17,7 @@ const SECURITY_TTL_MS = 24 * 60 * 60 * 1000
 const mediaUrl = (key: string) =>
   import.meta.env.DEV ? `/media/${key}` : `https://media.ayudave.com/${key}`
 
-export type Bounds = { s: number; n: number; w: number; e: number }
+export type Bounds = { s: number; n: number; w: number; e: number; types?: string[] }
 
 // Columnas mínimas del pin: mismo payload para el bbox y el seed.
 const pinCols = {
@@ -79,6 +80,10 @@ export const fetchReportsInBounds = createServerFn({ method: 'GET' })
       n: Number(b.n),
       w: Number(b.w),
       e: Number(b.e),
+      // filtro opcional por tipo (zoom-out global pide solo 'support'); whitelist
+      types: Array.isArray(b.types)
+        ? b.types.map(String).filter((t) => Object.hasOwn(TYPES, t))
+        : undefined,
     }),
   )
   .handler(async ({ data }) => {
@@ -90,7 +95,8 @@ export const fetchReportsInBounds = createServerFn({ method: 'GET' })
     const n = Math.ceil(data.n / G) * G
     const w = Math.floor(data.w / G) * G
     const e = Math.ceil(data.e / G) * G
-    const key = `bbox-${s.toFixed(1)}_${n.toFixed(1)}_${w.toFixed(1)}_${e.toFixed(1)}`
+    const typeFilter = data.types?.length ? data.types : null
+    const key = `bbox-${s.toFixed(1)}_${n.toFixed(1)}_${w.toFixed(1)}_${e.toFixed(1)}${typeFilter ? `_${typeFilter.join(',')}` : ''}`
 
     // TTL 30s: el poll (30s) puede ver un reporte nuevo con hasta ~30s de retraso
     // (el beep tarda un ciclo). ponytail: si urge inmediatez, poll incremental
@@ -121,6 +127,7 @@ export const fetchReportsInBounds = createServerFn({ method: 'GET' })
         .where(
           and(
             ...visibleFreshConds(),
+            ...(typeFilter ? [inArray(reports.type, typeFilter)] : []),
             gte(reports.lat, s),
             lte(reports.lat, n),
             gte(reports.lng, w),
@@ -153,6 +160,77 @@ export const fetchSeedReports = createServerFn({ method: 'GET' }).handler(
         .limit(200)
       return rows.map((r) => ({ ...r, createdAt: r.createdAt.getTime() }))
     }),
+)
+
+// Centros de acopio (type 'support') para la pestaña "Cómo ayudar": lista completa
+// agrupable por país. Es chica (~700) y global → la traemos toda, sin bbox. La lista
+// se cachea en el borde; `suggested` (país del visitante, CF-IPCountry) se computa
+// por request — pre-selecciona el país si tenemos centros ahí.
+export type AidCenter = {
+  id: string
+  name: string
+  country: string
+  countryCode: string | null
+  flag: string
+  city: string | null
+  address: string | null
+  needs: string[]
+  contact: string | null
+  url: string | null
+  lat: number
+  lng: number
+}
+
+export const fetchAidCenters = createServerFn({ method: 'GET' }).handler(
+  async (): Promise<{ centers: AidCenter[]; suggested: string | null }> => {
+    const centers = await edgeCached('aid-centers-v1', 60, async () => {
+      const db = getDb()
+      const rows = await db
+        .select({
+          id: reports.id,
+          name: reports.title,
+          lat: reports.lat,
+          lng: reports.lng,
+          contact: reports.contact,
+          url: reports.url,
+          meta: reports.meta,
+        })
+        .from(reports)
+        .where(and(eq(reports.type, 'support'), eq(reports.status, 'visible')))
+        .orderBy(asc(reports.title))
+      return rows.map((r): AidCenter => {
+        const m = (() => {
+          try {
+            return JSON.parse(r.meta ?? '{}') as Record<string, unknown>
+          } catch {
+            return {}
+          }
+        })()
+        const country = typeof m.country === 'string' && m.country.trim() ? m.country.trim() : 'Otro'
+        return {
+          id: r.id,
+          name: r.name,
+          country,
+          countryCode: isoForCountry(country),
+          flag: countryFlag(country),
+          city: typeof m.city === 'string' ? m.city : null,
+          address: typeof m.address === 'string' ? m.address : null,
+          needs: Array.isArray(m.available) ? m.available.map(String) : [],
+          contact: r.contact,
+          url: r.url,
+          lat: r.lat,
+          lng: r.lng,
+        }
+      })
+    })
+    // Pre-selección: país del visitante (CF) si tenemos centros ahí. Fuera del cache
+    // (varía por request); barato (un find sobre ~700).
+    const iso = clientCountry()
+    const suggested = iso
+      ? (centers.find((c) => c.countryCode === iso)?.country ?? null)
+      : null
+    return { centers, suggested }
+  },
 )
 
 // Lista de reportes apilados en una coordenada (el bbox la colapsa a un punto con

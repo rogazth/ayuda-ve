@@ -31,6 +31,11 @@ export function clientUa(): string {
   return (getRequestHeader('user-agent') ?? '').slice(0, 250)
 }
 
+// País del visitante (ISO-3166 alpha-2) según Cloudflare. '' en dev local.
+export function clientCountry(): string {
+  return (getRequestHeader('cf-ipcountry') ?? '').toUpperCase()
+}
+
 export async function clientUaHash(): Promise<string> {
   const ua = clientUa()
   if (!ua) return ''

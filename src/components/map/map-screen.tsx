@@ -83,6 +83,12 @@ const VE_MAX_BOUNDS: L.LatLngBoundsExpression = [
   [VE_BOUNDS.minLat - 6, VE_BOUNDS.minLng - 6],
   [VE_BOUNDS.maxLat + 6, VE_BOUNDS.maxLng + 6],
 ]
+// Sin límite práctico: el mapa vivo es libre (la diáspora navega a su país a ver
+// acopios). El límite VE solo se aplica al elegir ubicación de un reporte.
+const WORLD_BOUNDS: L.LatLngBoundsExpression = [
+  [-85, -180],
+  [85, 180],
+]
 
 // Arranque directo en la zona del terremoto. Cacheamos el último epicentro en
 // localStorage para abrir exacto en visitas siguientes.
@@ -170,24 +176,27 @@ function MapController({
   const map = useMap()
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const reqId = useRef(0)
-  // Área (con buffer) para la que ya tenemos pines montados. Mientras el viewport
-  // quepa dentro, no re-pedimos ni reconstruimos el cluster.
-  const loaded = useRef<L.LatLngBounds | null>(null)
+  // Área (con buffer) + modo para el que ya tenemos pines montados. Mientras el
+  // viewport quepa dentro y el modo no cambie, no re-pedimos ni reconstruimos el cluster.
+  const loaded = useRef<{ bounds: L.LatLngBounds; supportOnly: boolean } | null>(null)
 
   const load = useCallback(
     (announce: boolean, force = false) => {
       const c = map.getCenter()
       const center: [number, number] = [c.lat, c.lng]
-      if (map.getZoom() < MIN_ZOOM) {
-        loaded.current = null
-        onData({ pins: [], center, tooFar: true, announce })
-        return
-      }
+      // Zoom-out: traer SOLO centros de acopio (677, liviano, cobertura mundial)
+      // en vez de blanquear el mapa. A zoom de detalle, todos los tipos del viewport
+      // (los ~52k desaparecidos no tienen sentido —ni rinden— a escala continental).
+      const supportOnly = map.getZoom() < MIN_ZOOM
       const vb = map.getBounds()
-      // Viewport dentro del buffer ya cargado → solo paneamos sobre los
+      // Viewport dentro del buffer ya cargado y mismo modo → solo paneamos sobre los
       // marcadores existentes. Sin fetch ni rebuild: esto hace fluido el drag.
-      // Solo recargamos al salir del buffer (o forzado: poll / refresh).
-      if (!force && loaded.current?.contains(vb)) return
+      if (
+        !force &&
+        loaded.current?.supportOnly === supportOnly &&
+        loaded.current.bounds.contains(vb)
+      )
+        return
       const area = vb.pad(BUFFER)
       const id = ++reqId.current
       fetchReportsInBounds({
@@ -196,11 +205,12 @@ function MapController({
           n: area.getNorth(),
           w: area.getWest(),
           e: area.getEast(),
+          types: supportOnly ? ['support'] : undefined,
         },
       })
         .then((pins) => {
           if (id !== reqId.current) return
-          loaded.current = area
+          loaded.current = { bounds: area, supportOnly }
           onData({ pins, center, tooFar: false, announce })
         })
         .catch(() => {
@@ -469,6 +479,21 @@ export default function MapScreen({
     map.setView([m.lat, m.lng], QUAKE_ZOOM, { animate: false })
   }, [main?.id, user])
 
+  // Límite de navegación a Venezuela SOLO al elegir ubicación de un reporte (crear
+  // reporte es VE-only, y el backend igual rechaza coords fuera de rango). Fuera de
+  // ese flujo el mapa es libre. Si entrás al picker desde el exterior, recentra a VE.
+  useEffect(() => {
+    const m = mapRef.current
+    if (!m) return
+    if (reportFlow === 'picking') {
+      const c = m.getCenter()
+      if (!inVenezuela(c.lat, c.lng)) m.setView(QUAKE_ZONE, QUAKE_ZOOM)
+      m.setMaxBounds(VE_MAX_BOUNDS)
+    } else {
+      m.setMaxBounds(WORLD_BOUNDS)
+    }
+  }, [reportFlow])
+
   const recenter = () => {
     const m = mapRef.current
     if (!m) return
@@ -483,9 +508,7 @@ export default function MapScreen({
         className="absolute inset-0 h-full w-full z-0 bg-[#ebe8e0]"
         center={seed}
         zoom={QUAKE_ZOOM}
-        minZoom={5}
-        maxBounds={VE_MAX_BOUNDS}
-        maxBoundsViscosity={0.5}
+        minZoom={2}
         zoomControl={false}
         attributionControl={false}
         preferCanvas

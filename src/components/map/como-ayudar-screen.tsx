@@ -1,23 +1,50 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Popover } from 'radix-ui'
 import { Check, ChevronsUpDown, Map as MapIcon, MapPin, Phone, Search } from 'lucide-react'
-import { MOCK_AID_CENTERS, mockList, type AidCenter } from '../../mock'
+import { fetchAidCenters } from '../../reports/reports.functions'
+import type { AidCenter } from '../../reports/reports.functions'
 import { HelpUsCard } from './help-us-card'
 import { TelegramCta } from '../telegram-cta'
 
-// "Cómo ayudar" (POC G): selector de país + centros de acopio del país elegido.
-// Etapa 1: datos dummy (?mock=) — la tabla aid_centers se wirea en Etapa 2.
+// Cuántas tarjetas pintar de una. Sin país (todos) la lista llega a ~700 → render
+// incremental ("Ver más") para no congelar el primer paint en gama baja.
+const PAGE = 80
+
+// "Cómo ayudar": selector de país + centros de acopio. Sin país elegido muestra
+// TODOS; pre-selecciona el país del visitante (CF-IPCountry) si tenemos centros ahí.
 // Es una tab (panel bajo el nav): se sale por el bottom-nav, sin botón de cerrar.
 export function ComoAyudarScreen() {
-  const [{ items, loading }] = useState(() => mockList(MOCK_AID_CENTERS))
-
-  // ponytail: países derivados de los centros; en E2 vendrán del backend.
-  const countries = Array.from(
-    new Map(items.map((c) => [c.country, c.flag])).entries(),
-  ).sort((a, b) => a[0].localeCompare(b[0]))
-
+  const [data, setData] = useState<{ centers: AidCenter[]; suggested: string | null } | null>(null)
   const [country, setCountry] = useState<string | null>(null)
-  const shown = country ? items.filter((c) => c.country === country) : []
+  const [limit, setLimit] = useState(PAGE)
+
+  useEffect(() => {
+    let alive = true
+    fetchAidCenters()
+      .then((d) => alive && setData(d))
+      .catch(() => alive && setData({ centers: [], suggested: null }))
+    return () => {
+      alive = false
+    }
+  }, [])
+
+  // Pre-selecciona el país del visitante cuando llega la data (una vez).
+  useEffect(() => {
+    if (data?.suggested) setCountry(data.suggested)
+  }, [data?.suggested])
+
+  const loading = data === null
+  const items = data?.centers ?? []
+
+  // Países presentes (con bandera), ordenados; Venezuela primero (es el grueso).
+  const countries = Array.from(new Map(items.map((c) => [c.country, c.flag])).entries()).sort(
+    (a, b) => (a[0] === 'Venezuela' ? -1 : b[0] === 'Venezuela' ? 1 : a[0].localeCompare(b[0])),
+  )
+
+  const shown = country ? items.filter((c) => c.country === country) : items
+  const visible = shown.slice(0, limit)
+  // Reinicia el límite al cambiar de país.
+  useEffect(() => setLimit(PAGE), [country])
 
   return (
     <div className="fixed inset-0 z-[820] flex flex-col bg-surface-muted">
@@ -29,11 +56,7 @@ export function ComoAyudarScreen() {
       </header>
 
       <div className="flex-none border-b border-line bg-white px-4 py-3">
-        <CountryCombobox
-          countries={countries}
-          value={country}
-          onChange={setCountry}
-        />
+        <CountryCombobox countries={countries} value={country} onChange={setCountry} />
       </div>
 
       <div
@@ -42,25 +65,34 @@ export function ComoAyudarScreen() {
       >
         {loading ? (
           <p className="py-6 text-center text-[13px] text-ink-faint">Cargando…</p>
-        ) : !country ? (
-          <div className="mt-16 grid place-items-center px-8 text-center">
-            <MapPin className="size-10 text-ink-faint" />
-            <p className="mt-3 text-[14px] text-ink-muted">
-              Elegí un país para ver sus centros de acopio.
-            </p>
-          </div>
         ) : shown.length === 0 ? (
           <div className="mt-16 grid place-items-center px-8 text-center">
             <MapPin className="size-10 text-ink-faint" />
             <p className="mt-3 text-[14px] text-ink-muted">
-              Aún no hay centros de acopio en {country}.
+              {country
+                ? `Aún no hay centros de acopio en ${country}.`
+                : 'Aún no hay centros de acopio.'}
             </p>
           </div>
         ) : (
           <div className="px-4 pt-3">
-            {shown.map((c) => (
+            <p className="mb-2 text-[12.5px] text-ink-muted">
+              {country
+                ? `${shown.length} ${shown.length === 1 ? 'centro' : 'centros'} en ${country}`
+                : `${shown.length} centros en todos los países · elegí uno para filtrar`}
+            </p>
+            {visible.map((c) => (
               <AidCard key={c.id} c={c} />
             ))}
+            {shown.length > visible.length && (
+              <button
+                type="button"
+                onClick={() => setLimit((l) => l + PAGE)}
+                className="mb-2 mt-1 h-11 w-full rounded-xl border border-line bg-white text-[14px] font-bold text-ink"
+              >
+                Ver más ({shown.length - visible.length})
+              </button>
+            )}
           </div>
         )}
 
@@ -163,13 +195,15 @@ function AidCard({ c }: { c: AidCenter }) {
         <div className="min-w-0">
           <p className="text-[16px] font-extrabold text-ink">{c.name}</p>
           <p className="text-[12.5px] text-ink-muted">
-            {c.city}, {c.country}
+            {[c.city, c.country].filter(Boolean).join(', ')}
           </p>
         </div>
       </div>
-      <p className="mt-2 flex items-start gap-1.5 text-[13.5px] text-ink-muted">
-        <MapPin className="mt-0.5 size-[15px] flex-none" /> {c.address}
-      </p>
+      {c.address && (
+        <p className="mt-2 flex items-start gap-1.5 text-[13.5px] text-ink-muted">
+          <MapPin className="mt-0.5 size-[15px] flex-none" /> {c.address}
+        </p>
+      )}
       <div className="mt-2.5 flex flex-wrap gap-1.5">
         {c.needs.map((n) => (
           <span
