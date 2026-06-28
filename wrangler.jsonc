@@ -5,9 +5,15 @@
   "compatibility_flags": ["nodejs_compat"],
   "main": "./src/server.ts",
   "triggers": {
-    // cada 5 min: solo refresca el snapshot de sismos (USGS/FUNVISIS → quake_snapshot).
+    // cada 5 min: refresca el snapshot de sismos (USGS/FUNVISIS → quake_snapshot)
+    // y espeja a Telegram los reportes nuevos de usuarios (ver flushTelegram).
     // El scraping se movió al admin Laravel (cold path) → POST /internal/ingest.
     "crons": ["*/5 * * * *"],
+  },
+  "vars": {
+    // Canal público de reportes. No es secreto (está linkeado en el sitio). El
+    // token sí: `wrangler secret put TELEGRAM_BOT_TOKEN`.
+    "TELEGRAM_CHANNEL_ID": "@ayudave_reportes",
   },
   "d1_databases": [
     {

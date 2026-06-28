@@ -44,6 +44,9 @@ export const reports = sqliteTable(
     // (source, id) es único → cada corrida del cron hace upsert, no duplica.
     externalSource: text('external_source'), // ej. 'venezuelatebusca'
     externalId: text('external_id'), // id de la persona en la fuente
+    // Espejo a Telegram: timestamp del envío al canal. null = pendiente. Solo se
+    // estampa tras el 200 de Telegram (ver flushTelegram en server.ts).
+    notifiedAt: integer('notified_at', { mode: 'timestamp' }),
     ...timestamps(),
   },
   (t) => [
@@ -52,6 +55,11 @@ export const reports = sqliteTable(
     // SQLite trata NULLs como distintos, así que las filas de usuario
     // (ambos null) nunca colisionan; solo las scrapeadas comparten clave.
     uniqueIndex('reports_external').on(t.externalSource, t.externalId),
+    // Cola del espejo a Telegram: solo pendientes de usuario. Índice parcial →
+    // el cron no escanea toda la tabla (que crece con scrapeados ya notificados).
+    index('reports_unnotified')
+      .on(t.createdAt)
+      .where(sql`notified_at IS NULL AND external_source IS NULL`),
   ],
 )
 

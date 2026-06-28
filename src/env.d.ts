@@ -9,5 +9,8 @@ declare namespace Cloudflare {
     // falla cerrado si faltan. INGEST_ALLOWED_IPS es CSV de IPs del VPS.
     INGEST_SERVICE_KEY?: string
     INGEST_ALLOWED_IPS?: string
+    // Espejo de reportes a Telegram (@ayudave_reportes). El cron no-opea si faltan.
+    TELEGRAM_BOT_TOKEN?: string
+    TELEGRAM_CHANNEL_ID?: string
   }
 }
