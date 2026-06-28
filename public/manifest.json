@@ -1,7 +1,7 @@
 {
-  "short_name": "AyudaVE",
-  "name": "AyudaVE — Reportes de emergencia en Venezuela",
-  "description": "Mapa colaborativo de reportes de emergencia en Venezuela.",
+  "short_name": "Ayuda VE",
+  "name": "Ayuda Venezuela — Mapa de emergencia en tiempo real",
+  "description": "Reporta y encuentra personas, pide y ofrece ayuda durante la emergencia en Venezuela.",
   "lang": "es",
   "icons": [
     {
@@ -22,6 +22,6 @@
   ],
   "start_url": "/",
   "display": "standalone",
-  "theme_color": "#4fb8b2",
+  "theme_color": "#0e9c8f",
   "background_color": "#ffffff"
 }

@@ -9,11 +9,32 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as SitemapDotxmlRouteImport } from './routes/sitemap[.]xml'
+import { Route as PersonasDesaparecidasRouteImport } from './routes/personas-desaparecidas'
+import { Route as NumerosEmergenciaVenezuelaRouteImport } from './routes/numeros-emergencia-venezuela'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as MediaSplatRouteImport } from './routes/media.$'
+import { Route as InternalQuakeImageRouteImport } from './routes/internal.quake-image'
+import { Route as InternalIngestRouteImport } from './routes/internal.ingest'
 import { Route as ApiScrapeRouteImport } from './routes/api.scrape'
 import { Route as ApiReportsIdPhotosRouteImport } from './routes/api.reports.$id.photos'
 
+const SitemapDotxmlRoute = SitemapDotxmlRouteImport.update({
+  id: '/sitemap.xml',
+  path: '/sitemap.xml',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PersonasDesaparecidasRoute = PersonasDesaparecidasRouteImport.update({
+  id: '/personas-desaparecidas',
+  path: '/personas-desaparecidas',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const NumerosEmergenciaVenezuelaRoute =
+  NumerosEmergenciaVenezuelaRouteImport.update({
+    id: '/numeros-emergencia-venezuela',
+    path: '/numeros-emergencia-venezuela',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
@@ -22,6 +43,16 @@ const IndexRoute = IndexRouteImport.update({
 const MediaSplatRoute = MediaSplatRouteImport.update({
   id: '/media/$',
   path: '/media/$',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const InternalQuakeImageRoute = InternalQuakeImageRouteImport.update({
+  id: '/internal/quake-image',
+  path: '/internal/quake-image',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const InternalIngestRoute = InternalIngestRouteImport.update({
+  id: '/internal/ingest',
+  path: '/internal/ingest',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiScrapeRoute = ApiScrapeRouteImport.update({
@@ -37,40 +68,109 @@ const ApiReportsIdPhotosRoute = ApiReportsIdPhotosRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/numeros-emergencia-venezuela': typeof NumerosEmergenciaVenezuelaRoute
+  '/personas-desaparecidas': typeof PersonasDesaparecidasRoute
+  '/sitemap.xml': typeof SitemapDotxmlRoute
   '/api/scrape': typeof ApiScrapeRoute
+  '/internal/ingest': typeof InternalIngestRoute
+  '/internal/quake-image': typeof InternalQuakeImageRoute
   '/media/$': typeof MediaSplatRoute
   '/api/reports/$id/photos': typeof ApiReportsIdPhotosRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/numeros-emergencia-venezuela': typeof NumerosEmergenciaVenezuelaRoute
+  '/personas-desaparecidas': typeof PersonasDesaparecidasRoute
+  '/sitemap.xml': typeof SitemapDotxmlRoute
   '/api/scrape': typeof ApiScrapeRoute
+  '/internal/ingest': typeof InternalIngestRoute
+  '/internal/quake-image': typeof InternalQuakeImageRoute
   '/media/$': typeof MediaSplatRoute
   '/api/reports/$id/photos': typeof ApiReportsIdPhotosRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/numeros-emergencia-venezuela': typeof NumerosEmergenciaVenezuelaRoute
+  '/personas-desaparecidas': typeof PersonasDesaparecidasRoute
+  '/sitemap.xml': typeof SitemapDotxmlRoute
   '/api/scrape': typeof ApiScrapeRoute
+  '/internal/ingest': typeof InternalIngestRoute
+  '/internal/quake-image': typeof InternalQuakeImageRoute
   '/media/$': typeof MediaSplatRoute
   '/api/reports/$id/photos': typeof ApiReportsIdPhotosRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/api/scrape' | '/media/$' | '/api/reports/$id/photos'
+  fullPaths:
+    | '/'
+    | '/numeros-emergencia-venezuela'
+    | '/personas-desaparecidas'
+    | '/sitemap.xml'
+    | '/api/scrape'
+    | '/internal/ingest'
+    | '/internal/quake-image'
+    | '/media/$'
+    | '/api/reports/$id/photos'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/api/scrape' | '/media/$' | '/api/reports/$id/photos'
-  id: '__root__' | '/' | '/api/scrape' | '/media/$' | '/api/reports/$id/photos'
+  to:
+    | '/'
+    | '/numeros-emergencia-venezuela'
+    | '/personas-desaparecidas'
+    | '/sitemap.xml'
+    | '/api/scrape'
+    | '/internal/ingest'
+    | '/internal/quake-image'
+    | '/media/$'
+    | '/api/reports/$id/photos'
+  id:
+    | '__root__'
+    | '/'
+    | '/numeros-emergencia-venezuela'
+    | '/personas-desaparecidas'
+    | '/sitemap.xml'
+    | '/api/scrape'
+    | '/internal/ingest'
+    | '/internal/quake-image'
+    | '/media/$'
+    | '/api/reports/$id/photos'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  NumerosEmergenciaVenezuelaRoute: typeof NumerosEmergenciaVenezuelaRoute
+  PersonasDesaparecidasRoute: typeof PersonasDesaparecidasRoute
+  SitemapDotxmlRoute: typeof SitemapDotxmlRoute
   ApiScrapeRoute: typeof ApiScrapeRoute
+  InternalIngestRoute: typeof InternalIngestRoute
+  InternalQuakeImageRoute: typeof InternalQuakeImageRoute
   MediaSplatRoute: typeof MediaSplatRoute
   ApiReportsIdPhotosRoute: typeof ApiReportsIdPhotosRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/sitemap.xml': {
+      id: '/sitemap.xml'
+      path: '/sitemap.xml'
+      fullPath: '/sitemap.xml'
+      preLoaderRoute: typeof SitemapDotxmlRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/personas-desaparecidas': {
+      id: '/personas-desaparecidas'
+      path: '/personas-desaparecidas'
+      fullPath: '/personas-desaparecidas'
+      preLoaderRoute: typeof PersonasDesaparecidasRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/numeros-emergencia-venezuela': {
+      id: '/numeros-emergencia-venezuela'
+      path: '/numeros-emergencia-venezuela'
+      fullPath: '/numeros-emergencia-venezuela'
+      preLoaderRoute: typeof NumerosEmergenciaVenezuelaRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/': {
       id: '/'
       path: '/'
@@ -83,6 +183,20 @@ declare module '@tanstack/react-router' {
       path: '/media/$'
       fullPath: '/media/$'
       preLoaderRoute: typeof MediaSplatRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/internal/quake-image': {
+      id: '/internal/quake-image'
+      path: '/internal/quake-image'
+      fullPath: '/internal/quake-image'
+      preLoaderRoute: typeof InternalQuakeImageRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/internal/ingest': {
+      id: '/internal/ingest'
+      path: '/internal/ingest'
+      fullPath: '/internal/ingest'
+      preLoaderRoute: typeof InternalIngestRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/scrape': {
@@ -104,7 +218,12 @@ declare module '@tanstack/react-router' {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  NumerosEmergenciaVenezuelaRoute: NumerosEmergenciaVenezuelaRoute,
+  PersonasDesaparecidasRoute: PersonasDesaparecidasRoute,
+  SitemapDotxmlRoute: SitemapDotxmlRoute,
   ApiScrapeRoute: ApiScrapeRoute,
+  InternalIngestRoute: InternalIngestRoute,
+  InternalQuakeImageRoute: InternalQuakeImageRoute,
   MediaSplatRoute: MediaSplatRoute,
   ApiReportsIdPhotosRoute: ApiReportsIdPhotosRoute,
 }

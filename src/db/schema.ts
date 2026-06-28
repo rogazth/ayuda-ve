@@ -205,6 +205,11 @@ export const geocache = sqliteTable('geocache', {
 export const quakeSnapshot = sqliteTable('quake_snapshot', {
   id: integer('id').primaryKey(),
   data: text('data').notNull(),
+  // Infografía estática (mapa+heatmap+markers) que renderiza el admin con
+  // Playwright y sube a R2; el drawer la muestra como <img>. El mapa vivo ya no
+  // pinta sismos. La key la setea POST /internal/quake-image.
+  imageKey: text('image_key'),
+  imageUpdatedAt: integer('image_updated_at', { mode: 'timestamp' }),
   updatedAt: integer('updated_at', { mode: 'timestamp' })
     .notNull()
     .default(sql`(unixepoch())`),

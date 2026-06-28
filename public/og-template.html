@@ -130,47 +130,90 @@
     const tiles = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 });
     tiles.addTo(map);
 
-    // Heatmap = shakemap MMI (espejo del ShakemapLayer): anillos concéntricos
-    // semitransparentes alrededor del epicentro, paleta verde→amarillo→naranja→rojo.
-    const EPI = [10.4, -68.5];
-    const mmi = [
-      { r: 135000, c: '#a0e6b0' },
-      { r: 100000, c: '#f7f34f' },
-      { r: 68000,  c: '#ffc100' },
-      { r: 42000,  c: '#ff7100' },
-      { r: 22000,  c: '#d7263d' },
-    ];
-    for (const { r, c } of mmi) {
-      L.circle(EPI, { radius: r, stroke: false, fillColor: c, fillOpacity: 0.5 }).addTo(map);
+    // Color por magnitud (espejo de quakes.ts magColor).
+    const magColor = (m) =>
+      m >= 6 ? '#d7263d' : m >= 5 ? '#f4511e' : m >= 4 ? '#fb8c00' : m >= 3 ? '#fdd835' : '#9ccc65';
+
+    // El admin inyecta los sismos reales del snapshot (addInitScript) ANTES de este
+    // script. Con datos, el template es la INFOGRAFÍA del boletín: ShakeMap MMI oficial
+    // + epicentros, sin el texto de marca (el drawer ya rotula y pone la leyenda). Sin
+    // datos, cae al OG de marketing estático (mismo archivo sirve para los dos usos).
+    const Q = window.__QUAKE_DATA || null;
+    if (Q) renderInfographic(Q); else renderDemo();
+
+    function renderInfographic(Q) {
+      document.querySelector('.content').remove();
+      document.querySelector('.scrim').remove();
+      document.querySelector('.domain').remove();
+      const group = L.featureGroup().addTo(map);
+      // Contornos MMI: color/weight vienen del feed de USGS, no se inventan. Sirve para
+      // líneas iso-sísmicas o polígonos (stroke + fill cubren ambos).
+      if (Q.shakemap && Array.isArray(Q.shakemap.features)) {
+        L.geoJSON(Q.shakemap, {
+          style: (f) => ({
+            color: f.properties.color,
+            weight: f.properties.weight || 1,
+            fillColor: f.properties.color,
+            fillOpacity: 0.32,
+          }),
+        }).addTo(group);
+      }
+      // Epicentros: círculo proporcional a la magnitud, el principal resaltado.
+      for (const q of Q.quakes || []) {
+        L.circleMarker([q.lat, q.lng], {
+          radius: Math.max(5, q.mag * 3),
+          color: '#fff', weight: q.id === Q.mainId ? 3 : 1.5,
+          fillColor: magColor(q.mag), fillOpacity: 0.92,
+        }).addTo(group);
+      }
+      const b = group.getBounds();
+      if (b.isValid()) map.fitBounds(b, { padding: [60, 60], maxZoom: 9 });
+      else map.setView([8.2, -66], 6);
     }
 
-    const teardrop = (type) => L.divIcon({
-      className: 'bare',
-      html: `<div class="pin"><div style="background:${TYPES[type].color}"><svg viewBox="0 0 24 24">${TYPES[type].svg}</svg></div></div>`,
-      iconSize: [38, 38], iconAnchor: [19, 40],
-    });
-    const cluster = (n) => L.divIcon({
-      className: 'bare', html: `<div class="cluster">${n}</div>`,
-      iconSize: [40, 40], iconAnchor: [20, 20],
-    });
+    function renderDemo() {
+      // Heatmap = shakemap MMI (espejo del ShakemapLayer): anillos concéntricos
+      // semitransparentes alrededor del epicentro, paleta verde→amarillo→naranja→rojo.
+      const EPI = [10.4, -68.5];
+      const mmi = [
+        { r: 135000, c: '#a0e6b0' },
+        { r: 100000, c: '#f7f34f' },
+        { r: 68000,  c: '#ffc100' },
+        { r: 42000,  c: '#ff7100' },
+        { r: 22000,  c: '#d7263d' },
+      ];
+      for (const { r, c } of mmi) {
+        L.circle(EPI, { radius: r, stroke: false, fillColor: c, fillOpacity: 0.5 }).addTo(map);
+      }
 
-    // Epicentro
-    L.marker(EPI, { icon: L.divIcon({ className: 'bare', html: '<div class="epi"></div>', iconSize: [26,26], iconAnchor: [13,13] }) }).addTo(map);
+      const teardrop = (type) => L.divIcon({
+        className: 'bare',
+        html: `<div class="pin"><div style="background:${TYPES[type].color}"><svg viewBox="0 0 24 24">${TYPES[type].svg}</svg></div></div>`,
+        iconSize: [38, 38], iconAnchor: [19, 40],
+      });
+      const cluster = (n) => L.divIcon({
+        className: 'bare', html: `<div class="cluster">${n}</div>`,
+        iconSize: [40, 40], iconAnchor: [20, 20],
+      });
 
-    // Pins de reportes repartidos por la costa/centro
-    const pins = [
-      [10.50, -66.92, 'atrapado'],   // Caracas
-      [10.18, -67.99, 'estructura'], // Valencia
-      [10.25, -67.60, 'ayuda'],      // Maracay
-      [10.06, -69.32, 'ofrezco'],    // Barquisimeto
-      [11.40, -69.67, 'desaparecido'],// Coro
-      [10.21, -64.63, 'apoyo'],      // Barcelona
-      [9.75, -63.18, 'ayuda'],       // Maturín
-      [10.45, -68.01, 'atrapado'],
-    ];
-    for (const [lat, lng, t] of pins) L.marker([lat, lng], { icon: teardrop(t) }).addTo(map);
-    // Cluster cerca de la zona más golpeada
-    L.marker([10.33, -68.30], { icon: cluster(12) }).addTo(map);
+      // Epicentro
+      L.marker(EPI, { icon: L.divIcon({ className: 'bare', html: '<div class="epi"></div>', iconSize: [26,26], iconAnchor: [13,13] }) }).addTo(map);
+
+      // Pins de reportes repartidos por la costa/centro
+      const pins = [
+        [10.50, -66.92, 'atrapado'],   // Caracas
+        [10.18, -67.99, 'estructura'], // Valencia
+        [10.25, -67.60, 'ayuda'],      // Maracay
+        [10.06, -69.32, 'ofrezco'],    // Barquisimeto
+        [11.40, -69.67, 'desaparecido'],// Coro
+        [10.21, -64.63, 'apoyo'],      // Barcelona
+        [9.75, -63.18, 'ayuda'],       // Maturín
+        [10.45, -68.01, 'atrapado'],
+      ];
+      for (const [lat, lng, t] of pins) L.marker([lat, lng], { icon: teardrop(t) }).addTo(map);
+      // Cluster cerca de la zona más golpeada
+      L.marker([10.33, -68.30], { icon: cluster(12) }).addTo(map);
+    }
 
     let tilesDone = false;
     tiles.on('load', () => { tilesDone = true; });

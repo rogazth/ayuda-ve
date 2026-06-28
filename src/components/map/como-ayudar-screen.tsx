@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Map as MapIcon, MapPin, Phone, Search } from 'lucide-react'
 import { MOCK_AID_CENTERS, mockList, type AidCenter } from '../../mock'
 import { HelpUsCard } from './help-us-card'
+import { TelegramCta } from '../telegram-cta'
 
 // "Cómo ayudar" (POC G): directorio buscable de centros de acopio en el exterior
 // + mini-mapa acotado. Etapa 1: datos dummy (?mock=) — la tabla aid_centers y la
@@ -118,7 +119,8 @@ export function ComoAyudarScreen() {
           </div>
         )}
 
-        <div className="px-4 pt-6">
+        <div className="flex flex-col gap-4 px-4 pt-6">
+          <TelegramCta />
           <HelpUsCard />
         </div>
       </div>

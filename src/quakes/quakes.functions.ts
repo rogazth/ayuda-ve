@@ -42,6 +42,10 @@ export type QuakeData = {
   mainId: string | null
   shakemap: MmiContours | null
   forecast: Forecast | null
+  // Infografía estática (mapa+heatmap+markers) que renderiza el admin y sube a
+  // R2. NO se guarda en el JSON del snapshot: se inyecta al leer, desde la
+  // columna quake_snapshot.image_key. null si el admin no la generó aún.
+  imageUrl?: string | null
 }
 
 // Cómputo en vivo desde las fuentes externas (USGS + FUNVISIS). Caro: varios
@@ -154,17 +158,26 @@ export async function computeQuakes(): Promise<QuakeData> {
 // sin tocar USGS/FUNVISIS). Fallback a cómputo en vivo si aún no hay snapshot
 // (ventana fría tras un deploy, hasta que corra el primer cron). getDb se usa
 // solo dentro del handler → el bundler lo elimina del cliente.
+// URL pública de un objeto en R2 (misma convención que reports.functions).
+const mediaUrl = (key: string) =>
+  import.meta.env.DEV ? `/media/${key}` : `https://media.ayudave.com/${key}`
+
 export const fetchQuakes = createServerFn({ method: 'GET' }).handler(
   async (): Promise<QuakeData> => {
     try {
       const row = (
         await getDb()
-          .select({ data: quakeSnapshot.data })
+          .select({ data: quakeSnapshot.data, imageKey: quakeSnapshot.imageKey })
           .from(quakeSnapshot)
           .where(eq(quakeSnapshot.id, 1))
           .limit(1)
       ).at(0)
-      if (row?.data) return JSON.parse(row.data) as QuakeData
+      if (row?.data) {
+        const data = JSON.parse(row.data) as QuakeData
+        // imageUrl vive en la columna, no en el JSON: lo inyecta el read.
+        data.imageUrl = row.imageKey ? mediaUrl(row.imageKey) : null
+        return data
+      }
     } catch {
       /* sin tabla/snapshot todavía: caemos a cómputo en vivo */
     }

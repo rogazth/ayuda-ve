@@ -9,6 +9,7 @@ import {
 } from 'lucide-react'
 import { SuggestionDialog } from './suggestion-dialog'
 import { HelpUsCard } from './help-us-card'
+import { TelegramCta } from '../telegram-cta'
 
 // "Más" (POC H): menú que re-aloja Cómo ayudar, Emergencias, Acerca de y Compartir.
 // Es una tab (panel sobre el mapa, sin back). Reusa los diálogos existentes
@@ -81,7 +82,8 @@ export function MasScreen({
           onClick={shareApp}
         />
 
-        <div className="px-4 pt-5">
+        <div className="flex flex-col gap-4 px-4 pt-5">
+          <TelegramCta />
           <HelpUsCard />
         </div>
       </div>

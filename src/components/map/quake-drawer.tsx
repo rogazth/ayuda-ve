@@ -31,14 +31,12 @@ function fmtGap(ms: number) {
 export function QuakeDrawer({
   data,
   main,
-  heatmap,
-  onToggleHeatmap,
+  imageUrl,
   onClose,
 }: {
   data: QuakeData | null
   main: Quake | null
-  heatmap: boolean
-  onToggleHeatmap: () => void
+  imageUrl: string | null
   onClose: () => void
 }) {
   return (
@@ -64,12 +62,7 @@ export function QuakeDrawer({
       </div>
 
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden px-[18px] pt-[14px] pb-[calc(12px+env(safe-area-inset-bottom))]">
-        <QuakeSheet
-          data={data}
-          main={main}
-          heatmap={heatmap}
-          onToggleHeatmap={onToggleHeatmap}
-        />
+        <QuakeSheet data={data} main={main} imageUrl={imageUrl} />
       </div>
     </div>
   )
@@ -80,13 +73,11 @@ export function QuakeDrawer({
 function QuakeSheet({
   data,
   main,
-  heatmap,
-  onToggleHeatmap,
+  imageUrl,
 }: {
   data: QuakeData | null
   main: Quake | null
-  heatmap: boolean
-  onToggleHeatmap: () => void
+  imageUrl: string | null
 }) {
   if (!data)
     return (
@@ -231,8 +222,10 @@ function QuakeSheet({
             )}
           </section>
 
-          {/* Zona afectada + escala MMI */}
-          {data.shakemap && (
+          {/* Zona afectada: infografía estática (mapa+heatmap+markers) + escala
+              MMI. La imagen la renderiza el admin y la sirve R2; el mapa vivo ya
+              no pinta sismos. Si aún no hay imagen, mostramos solo la leyenda. */}
+          {(imageUrl || data.shakemap) && (
             <section className="mt-[4px]">
               <div className="mt-[20px] mb-[8px] flex items-baseline gap-[8px]">
                 <h3 className="text-[16px] font-bold text-[#173a40]">
@@ -249,9 +242,17 @@ function QuakeSheet({
                   </a>
                 )}
               </div>
+              {imageUrl && (
+                <img
+                  src={imageUrl}
+                  alt="Mapa de intensidad de la sacudida (escala MMI) con los sismos del período"
+                  loading="lazy"
+                  className="mt-[2px] mb-[12px] w-full rounded-[12px] border border-[#ededeb]"
+                />
+              )}
               <p className="text-[13.5px] leading-[1.55] text-[#3a4145]">
-                Los contornos en el mapa marcan la intensidad de la sacudida
-                (escala MMI de USGS), según la distancia al epicentro.
+                Los contornos marcan la intensidad de la sacudida (escala MMI de
+                USGS), según la distancia al epicentro.
               </p>
               <div className="mt-[12px] mb-[5px] flex h-[8px] overflow-hidden rounded-[5px]">
                 <i className="flex-1" style={{ background: '#a0e6b0' }} />
@@ -265,34 +266,6 @@ function QuakeSheet({
                 <span>Moderada</span>
                 <span>Severa</span>
               </div>
-              {/* Toggle de la capa de intensidad (antes vivía en el riel del mapa).
-                  Aquí tiene contexto: la leyenda MMI explica qué se está pintando. */}
-              <button
-                type="button"
-                onClick={onToggleHeatmap}
-                aria-pressed={heatmap}
-                className="mt-[14px] flex w-full items-center gap-[10px] rounded-[12px] border border-[#ededeb] bg-[#f7f9f8] px-[14px] py-[11px] text-left"
-              >
-                <span className="min-w-0 flex-1">
-                  <b className="block text-[14px] font-semibold text-[#173a40]">
-                    Ver intensidad en el mapa
-                  </b>
-                  <span className="block text-[12px] text-[#737f82]">
-                    Pinta los contornos de sacudida al cerrar este boletín
-                  </span>
-                </span>
-                <span
-                  className={`relative h-[26px] w-[44px] flex-none rounded-full transition-colors ${
-                    heatmap ? 'bg-[#0e9c8f]' : 'bg-[#cbd2d0]'
-                  }`}
-                >
-                  <span
-                    className={`absolute top-[3px] h-[20px] w-[20px] rounded-full bg-white shadow-[0_1px_3px_rgba(0,0,0,0.3)] transition-all ${
-                      heatmap ? 'left-[21px]' : 'left-[3px]'
-                    }`}
-                  />
-                </span>
-              </button>
             </section>
           )}
 

@@ -28,36 +28,36 @@ export const Route = createRootRoute({
         content:
           'width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover',
       },
-      { title: 'AyudaVE — Reportes de emergencia en Venezuela' },
+      { title: 'Ayuda Venezuela — Mapa de emergencia en tiempo real' },
       {
         name: 'description',
         content:
-          'Mapa colaborativo de reportes de emergencia en Venezuela. Reporta y consulta incidentes, sismos y alertas en tiempo real.',
+          'Reporta y encuentra personas desaparecidas, pide y ofrece ayuda, y sigue sismos y alertas durante la emergencia en Venezuela. Información de la comunidad, en tiempo real.',
       },
       { property: 'og:type', content: 'website' },
-      { property: 'og:site_name', content: 'AyudaVE' },
+      { property: 'og:site_name', content: 'Ayuda Venezuela' },
       { property: 'og:url', content: 'https://ayudave.com' },
-      { property: 'og:title', content: 'AyudaVE — Reportes de emergencia en Venezuela' },
+      { property: 'og:title', content: 'Ayuda Venezuela — Mapa de emergencia en tiempo real' },
       {
         property: 'og:description',
         content:
-          'Mapa colaborativo de reportes de emergencia en Venezuela. Reporta y consulta incidentes, sismos y alertas en tiempo real.',
+          'Reporta y encuentra personas desaparecidas, pide y ofrece ayuda, y sigue sismos y alertas durante la emergencia en Venezuela. Información de la comunidad, en tiempo real.',
       },
       { property: 'og:image', content: 'https://ayudave.com/og.png' },
       { property: 'og:image:width', content: '1200' },
       { property: 'og:image:height', content: '630' },
       { name: 'twitter:card', content: 'summary_large_image' },
-      { name: 'twitter:title', content: 'AyudaVE — Reportes de emergencia en Venezuela' },
+      { name: 'twitter:title', content: 'Ayuda Venezuela — Mapa de emergencia en tiempo real' },
       {
         name: 'twitter:description',
         content:
-          'Mapa colaborativo de reportes de emergencia en Venezuela. Reporta y consulta incidentes, sismos y alertas en tiempo real.',
+          'Reporta y encuentra personas desaparecidas, pide y ofrece ayuda, y sigue sismos y alertas durante la emergencia en Venezuela. Información de la comunidad, en tiempo real.',
       },
       { name: 'twitter:image', content: 'https://ayudave.com/og.png' },
       { name: 'theme-color', content: '#0e9c8f' },
       { name: 'mobile-web-app-capable', content: 'yes' },
       { name: 'apple-mobile-web-app-capable', content: 'yes' },
-      { name: 'apple-mobile-web-app-title', content: 'AyudaVE' },
+      { name: 'apple-mobile-web-app-title', content: 'Ayuda Venezuela' },
     ],
     links: [
       {
@@ -72,6 +72,28 @@ export const Route = createRootRoute({
   }),
   shellComponent: RootDocument,
 })
+
+// Schema sitewide (SSR en todas las páginas). Organization + WebSite = base que
+// Google asocia al dominio; las landings añaden su BreadcrumbList.
+const SITE_SCHEMA = {
+  '@context': 'https://schema.org',
+  '@graph': [
+    {
+      '@type': 'Organization',
+      '@id': 'https://ayudave.com/#org',
+      name: 'Ayuda Venezuela',
+      url: 'https://ayudave.com',
+      logo: 'https://ayudave.com/logo512.png',
+    },
+    {
+      '@type': 'WebSite',
+      '@id': 'https://ayudave.com/#website',
+      name: 'Ayuda Venezuela',
+      url: 'https://ayudave.com',
+      inLanguage: 'es',
+    },
+  ],
+}
 
 function RootDocument({ children }: { children: React.ReactNode }) {
   // ponytail: dev-only, client-side import (touches window) — react-grab toolbar
@@ -92,6 +114,10 @@ function RootDocument({ children }: { children: React.ReactNode }) {
         <HeadContent />
       </head>
       <body className="font-sans antialiased [overflow-wrap:anywhere] selection:bg-[rgba(79,184,178,0.24)]">
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(SITE_SCHEMA) }}
+        />
         {children}
         {/* dev-only: el import.meta.env.DEV falso en prod elimina el árbol (y el import) del bundle */}
         {import.meta.env.DEV && (

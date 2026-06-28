@@ -5,15 +5,11 @@ import { media, reportConfirms, reports } from '../db/schema'
 import { clientIpHash, clientUa } from '../server/req'
 import { TYPES, safeUrl } from './reports'
 
-// ponytail: dato viejo en emergencia = peligroso. Filtramos a 48h (mvp.md).
-// Excepción: desaparecidos (missing) y mascotas perdidas (lostpet) son registro
-// de pie, no caducan a 48h — se ocultan cuando la fuente los marca encontrados
-// (status='found'), no por antigüedad.
-// TODO(albergue): los albergues sembrados deberían exentarse de este filtro.
-const FRESH_MS = 48 * 60 * 60 * 1000
-const STANDING_TYPES = ['missing', 'lostpet'] // exentos del corte de 48h
-// Alertas de seguridad expiran en 12h — son eventos puntuales, no permanentes.
-const SECURITY_TTL_MS = 12 * 60 * 60 * 1000
+// Decisión PO: el mapa muestra TODO lo visible, sin corte de antigüedad. La
+// visibilidad la maneja solo `status` (hidden por moderación/flags, found cuando
+// la fuente lo marca). Única excepción temporal: las alertas de seguridad son
+// eventos puntuales y expiran a 24h.
+const SECURITY_TTL_MS = 24 * 60 * 60 * 1000
 
 // URL pública de un objeto en R2. En dev el SW proxea /media/<key>; en prod sale
 // del bucket público. Una sola fuente para detalle y feed.
@@ -33,14 +29,12 @@ const pinCols = {
   createdAt: reports.createdAt,
 }
 
-// Reglas de visibilidad compartidas (status + frescura). missing/lostpet exentos
-// del corte de 48h (registro de pie); las alertas de seguridad expiran en 12h.
+// Reglas de visibilidad compartidas: solo `status='visible'`, sin corte de
+// antigüedad (decisión PO). Única excepción: las alertas de seguridad expiran a 24h.
 function visibleFreshConds() {
-  const cutoff = new Date(Date.now() - FRESH_MS)
   const securityCutoff = new Date(Date.now() - SECURITY_TTL_MS)
   return [
     eq(reports.status, 'visible'),
-    or(inArray(reports.type, STANDING_TYPES), gte(reports.createdAt, cutoff)),
     or(ne(reports.type, 'security'), gte(reports.createdAt, securityCutoff)),
   ]
 }

@@ -5,5 +5,9 @@
 declare namespace Cloudflare {
   interface Env {
     MAPBOX_TOKEN: string
+    // Ingest interno (admin Laravel → /internal/*). Secret + var; el middleware
+    // falla cerrado si faltan. INGEST_ALLOWED_IPS es CSV de IPs del VPS.
+    INGEST_SERVICE_KEY?: string
+    INGEST_ALLOWED_IPS?: string
   }
 }

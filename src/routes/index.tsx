@@ -9,7 +9,7 @@ import type { Pin } from '../components/map/types'
 import { MapChrome } from '../components/map/map-chrome'
 import { typeOf } from '../reports/reports'
 
-type Og = { title: string; description: string; image: string }
+type Og = { title: string; description: string; image: string; url: string }
 
 const fetchOg = createServerFn({ method: 'GET' })
   .validator((id: string) => id)
@@ -29,14 +29,19 @@ function ogFor(report: ReportDetail, origin: string): Og {
     report.type === 'missing' && typeof report.meta.missingName === 'string'
       ? report.meta.missingName.trim()
       : ''
-  const title = name ? `Buscamos a ${name} · AyudaVE` : `${t.label} · AyudaVE`
+  const title = name ? `Buscamos a ${name} · Ayuda Venezuela` : `${t.label} · Ayuda Venezuela`
   const description =
     report.description.trim().slice(0, 200) ||
-    'Reporte de la comunidad · AyudaVE'
-  // ponytail: las fotos son base64 (inservibles como og:image). Hasta R2
-  // [[photos-to-r2]] usamos el logo; cambiar a la URL de la foto cuando exista.
-  const image = `${origin}/logo512.png`
-  return { title, description, image }
+    'Reporte de la comunidad · Ayuda Venezuela'
+  // Foto real del reporte (R2, [[photos-to-r2]]) como og:image; logo si no hay.
+  // En prod media.url ya es absoluta; en dev es /media/... → la absolutizamos.
+  const photo = report.media[0]?.url
+  const image = photo
+    ? photo.startsWith('http')
+      ? photo
+      : `${origin}${photo}`
+    : `${origin}/logo512.png`
+  return { title, description, image, url: `${origin}/?r=${report.id}` }
 }
 
 export const Route = createFileRoute('/')({
@@ -65,13 +70,15 @@ export const Route = createFileRoute('/')({
   },
   head: ({ loaderData }) => {
     const og = loaderData?.og
-    if (!og) return {}
+    // Sin reporte = la home: canonical a la raíz (no arrastrar ?r al indexar).
+    if (!og) return { links: [{ rel: 'canonical', href: 'https://ayudave.com/' }] }
     return {
       meta: [
         { title: og.title },
         { name: 'description', content: og.description },
         { property: 'og:title', content: og.title },
         { property: 'og:description', content: og.description },
+        { property: 'og:url', content: og.url },
         { property: 'og:image', content: og.image },
         { property: 'og:type', content: 'website' },
         { name: 'twitter:card', content: 'summary_large_image' },
@@ -79,6 +86,7 @@ export const Route = createFileRoute('/')({
         { name: 'twitter:description', content: og.description },
         { name: 'twitter:image', content: og.image },
       ],
+      links: [{ rel: 'canonical', href: og.url }],
     }
   },
   component: App,

@@ -3,7 +3,6 @@ import {
   MapContainer,
   Marker,
   TileLayer,
-  Tooltip,
   useMap,
   useMapEvents,
 } from 'react-leaflet'
@@ -11,7 +10,7 @@ import MarkerClusterGroup from 'react-leaflet-cluster'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import 'leaflet.markercluster/dist/MarkerCluster.css'
-import { fmtAge, newFreshPins, typeOf } from '../../reports/reports'
+import { newFreshPins, typeOf } from '../../reports/reports'
 import {
   fetchReport,
   fetchReportsInBounds,
@@ -20,18 +19,8 @@ import { StackDrawer } from './stack-drawer'
 import type { ReportDetail } from '../../reports/reports.functions'
 import { reverseEstado } from '../../geo/geo.functions'
 import { fetchQuakes } from '../../quakes/quakes.functions'
-import type {
-  Quake,
-  QuakeData,
-  MmiContours,
-} from '../../quakes/quakes.functions'
-import {
-  VE_BOUNDS,
-  esPlace,
-  inVenezuela,
-  magColor,
-  quakeOpacity,
-} from '../../quakes/quakes'
+import type { QuakeData } from '../../quakes/quakes.functions'
+import { VE_BOUNDS, inVenezuela } from '../../quakes/quakes'
 import type { Pin, Data } from './types'
 import { MapChrome, mainAndLatest } from './map-chrome'
 import type { Tab } from './map-chrome'
@@ -48,76 +37,6 @@ import { ReportWizard } from './report-wizard'
 import { LocationPicker } from './location-picker'
 import { ReportDetailScreen } from './report-detail'
 import { toast } from 'sonner'
-
-// Renderiza los contornos MMI como anillos (evenodd) en canvas → imageOverlay.
-// Cada zona se pinta UNA sola vez (outer contour - inner contour) → sin opacidad apilada.
-// El bbox se deriva de los datos → sin bordes rectangulares.
-function ShakemapLayer({ shakemap }: { shakemap: MmiContours }) {
-  const map = useMap()
-  useEffect(() => {
-    // Bbox de todos los contornos
-    let minLng = Infinity,
-      maxLng = -Infinity,
-      minLat = Infinity,
-      maxLat = -Infinity
-    for (const f of shakemap.features) {
-      for (const line of f.geometry.coordinates) {
-        for (const [lng, lat] of line as [number, number][]) {
-          if (lng < minLng) minLng = lng
-          if (lng > maxLng) maxLng = lng
-          if (lat < minLat) minLat = lat
-          if (lat > maxLat) maxLat = lat
-        }
-      }
-    }
-
-    const W = 512
-    const H = Math.round((W * (maxLat - minLat)) / (maxLng - minLng))
-    const toX = (lng: number) => ((lng - minLng) / (maxLng - minLng)) * W
-    const toY = (lat: number) => ((maxLat - lat) / (maxLat - minLat)) * H
-
-    const canvas = document.createElement('canvas')
-    canvas.width = W
-    canvas.height = H
-    const ctx = canvas.getContext('2d')!
-
-    // Cada zona se pinta como anillo (outer - inner) con evenodd para no apilar capas.
-    // Ordenado por MMI ascendente: sorted[i] es el outer, sorted[i+1] el inner cutout.
-    const sorted = [...shakemap.features].sort(
-      (a, b) => a.properties.value - b.properties.value,
-    )
-    const drawContour = (f: MmiContours['features'][number]) => {
-      for (const line of f.geometry.coordinates) {
-        const coords = line as [number, number][]
-        ctx.moveTo(toX(coords[0][0]), toY(coords[0][1]))
-        for (let i = 1; i < coords.length; i++)
-          ctx.lineTo(toX(coords[i][0]), toY(coords[i][1]))
-        ctx.closePath()
-      }
-    }
-    for (let i = 0; i < sorted.length; i++) {
-      ctx.beginPath()
-      drawContour(sorted[i])
-      if (i + 1 < sorted.length) drawContour(sorted[i + 1]) // recorta el interior
-      const hex = sorted[i].properties.color || '#888'
-      const r = parseInt(hex.slice(1, 3), 16)
-      const g = parseInt(hex.slice(3, 5), 16)
-      const b = parseInt(hex.slice(5, 7), 16)
-      ctx.fillStyle = `rgba(${r},${g},${b},0.5)`
-      ctx.fill('evenodd')
-    }
-
-    const overlay = L.imageOverlay(canvas.toDataURL(), [
-      [minLat, minLng],
-      [maxLat, maxLng],
-    ])
-    overlay.addTo(map)
-    return () => {
-      overlay.remove()
-    }
-  }, [map, shakemap])
-  return null
-}
 
 // Beep corto vía Web Audio: sin assets ni fetch. Contexto nuevo por beep, se
 // cierra al terminar (los navegadores limitan ~6 contextos vivos).
@@ -233,23 +152,6 @@ const youIcon = L.divIcon({
   iconSize: [18, 18],
   iconAnchor: [9, 9],
 })
-
-function quakeIcon(q: Quake, main: boolean) {
-  const size = Math.max(9, Math.round(q.mag * 6))
-  // Recencia: el principal siempre nítido; el resto se desvanece con la edad
-  // (grande o reciente resalta, chico y viejo se va al fondo). Se recalcula en
-  // cada poll de 60s, de sobra para un fade medido en horas.
-  const op = main ? 1 : quakeOpacity(q.mag, Date.now() - q.time)
-  const ripple = main
-    ? " before:content-[''] before:absolute before:inset-0 before:rounded-full before:border-2 before:border-[color:var(--c)] before:animate-epi-ripple before:motion-reduce:animate-none after:content-[''] after:absolute after:inset-0 after:rounded-full after:border-2 after:border-[color:var(--c)] after:animate-epi-ripple after:[animation-delay:1.3s] after:motion-reduce:animate-none"
-    : ''
-  return L.divIcon({
-    className: '!bg-none !border-none',
-    html: `<span class="block rounded-full bg-[var(--c)] shadow-[0_0_0_2px_#fff,0_1px_4px_rgba(0,0,0,0.35)] relative${ripple}" style="--c:${magColor(q.mag)};width:${size}px;height:${size}px;opacity:${op}"></span>`,
-    iconSize: [size, size],
-    iconAnchor: [size / 2, size / 2],
-  })
-}
 
 // Vive dentro del MapContainer: tiene el mapa, dispara fetch por bbox (debounced) y GPS.
 function MapController({
@@ -403,17 +305,16 @@ export default function MapScreen({
   initialPins?: Pin[]
   initialQuakes?: QuakeData | null
 }) {
-  // Sin modos. El mapa muestra siempre el terremoto (epicentro + heatmap) y los
-  // pines de reporte. Encima, tres cosas independientes: el banner abre el
-  // boletín (infoOpen), "Intensidad" prende/apaga el heatmap, y "Reportar"
-  // siempre disponible. Ayuda y Acerca de son dialogs aparte.
+  // Sin modos. El mapa muestra los pines de reporte; los sismos ya NO se pintan
+  // en el mapa vivo (van como infografía estática en el boletín). El banner abre
+  // el boletín (infoOpen) y "Reportar" siempre disponible. Ayuda y Acerca de son
+  // dialogs aparte.
   const [infoOpen, setInfoOpen] = useState(false)
   // Tab activo: overlay sobre el mapa montado, no una ruta. 'mapa' = sin panel.
   const [tab, setTab] = useState<Tab>('mapa')
-  const [heatmap, setHeatmap] = useState(true)
-  // initialPins/initialQuakes vienen del loader SSR → pines + heatmap se pintan
-  // al montar el mapa, sin esperar el round-trip. El bbox del viewport reemplaza
-  // los pines apenas resuelve; el poll de 60s refresca quakes.
+  // initialPins/initialQuakes vienen del loader SSR → los pines se pintan al
+  // montar el mapa, sin round-trip; quakes alimenta el badge + boletín (no el
+  // mapa). El bbox del viewport reemplaza los pines; el poll de 60s refresca quakes.
   const [pins, setPins] = useState<Pin[]>(initialPins)
   const [user, setUser] = useState<[number, number] | null>(null)
   const [quakes, setQuakes] = useState<QuakeData | null>(initialQuakes)
@@ -617,30 +518,8 @@ export default function MapScreen({
           refreshKey={refreshKey}
         />
         <PinsLayer pins={pins} onSelect={onSelect} onStack={onStack} />
-        {quakes && (
-          <>
-            {heatmap && quakes.shakemap != null && (
-              <ShakemapLayer shakemap={quakes.shakemap} />
-            )}
-            {quakes.quakes.map((q) => (
-              <Marker
-                key={q.id}
-                position={[q.lat, q.lng]}
-                icon={quakeIcon(q, q.id === quakes.mainId)}
-              >
-                <Tooltip direction="top">
-                  <b>
-                    {q.id === quakes.mainId ? 'Terremoto' : 'Sismo'} M{' '}
-                    {q.mag.toFixed(1)}
-                  </b>{' '}
-                  · {esPlace(q.place) || 'sin lugar'}
-                  <br />
-                  {fmtAge(q.time)} · {Math.round(q.depth)} km prof.
-                </Tooltip>
-              </Marker>
-            ))}
-          </>
-        )}
+        {/* Los sismos ya no se pintan en el mapa vivo: van como infografía
+            estática en el boletín (QuakeDrawer). Aquí solo pines + ubicación. */}
         {user && <Marker position={user} icon={youIcon} />}
       </MapContainer>
 
@@ -737,8 +616,7 @@ export default function MapScreen({
         <QuakeDrawer
           data={quakes}
           main={main}
-          heatmap={heatmap}
-          onToggleHeatmap={() => setHeatmap((h) => !h)}
+          imageUrl={quakes?.imageUrl ?? null}
           onClose={() => setInfoOpen(false)}
         />
       )}
