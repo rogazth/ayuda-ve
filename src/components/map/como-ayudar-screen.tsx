@@ -112,14 +112,14 @@ function CountryCombobox({
 }: {
   countries: [string, string][]
   value: string | null
-  onChange: (c: string) => void
+  onChange: (c: string | null) => void
 }) {
   const [open, setOpen] = useState(false)
   const [q, setQ] = useState('')
   const filtered = q.trim()
     ? countries.filter(([name]) => name.toLowerCase().includes(q.toLowerCase()))
     : countries
-  const flag = value && countries.find(([n]) => n === value)?.[1]
+  const flag = value ? countries.find(([n]) => n === value)?.[1] : '🌎'
 
   return (
     <Popover.Root
@@ -136,7 +136,7 @@ function CountryCombobox({
         >
           {flag && <span className="text-[18px]">{flag}</span>}
           <span className={value ? '' : 'text-ink-muted'}>
-            {value ?? 'Seleccioná un país'}
+            {value ?? 'Todos los países'}
           </span>
           <ChevronsUpDown className="ml-auto size-[18px] flex-none text-ink-muted" />
         </button>
@@ -158,6 +158,22 @@ function CountryCombobox({
             />
           </div>
           <div className="max-h-[260px] overflow-y-auto py-1">
+            {!q.trim() && (
+              <button
+                type="button"
+                onClick={() => {
+                  onChange(null)
+                  setOpen(false)
+                }}
+                className="flex w-full items-center gap-2 px-3.5 py-2.5 text-left text-[14px] text-ink hover:bg-surface-muted"
+              >
+                <span className="text-[18px]">🌎</span>
+                <span>Todos los países</span>
+                {value === null && (
+                  <Check className="ml-auto size-[18px] flex-none text-lagoon" />
+                )}
+              </button>
+            )}
             {filtered.length === 0 ? (
               <p className="px-3.5 py-3 text-[13px] text-ink-muted">Sin resultados.</p>
             ) : (
