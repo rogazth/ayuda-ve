@@ -26,14 +26,17 @@ import {
 } from '../../reports/reports'
 import { appearReport, flagReport } from '../../reports/reports.functions'
 import type { ReportDetail } from '../../reports/reports.functions'
-// Etapa 1: comentarios con datos dummy + variantes (?mock=full|empty|loading). El
-// backend de comentarios (comments.functions) queda parqueado y se wirea en E2. [[mock]]
-import { MOCK_COMMENTS, mockList, type Comment } from '../../mock'
+import {
+  addComment,
+  fetchComments,
+  flagComment,
+} from '../../comments/comments.functions'
+import type { CommentRow } from '../../comments/comments.functions'
 import { MoreActionsDrawer } from './more-actions-drawer'
 
-// ponytail: comentarios ocultos por ahora (acordado). El código queda intacto;
-// poner en true para volver a mostrar la sección. Mismo flag en feed-screen.tsx.
-const COMMENTS_ENABLED = false
+// Único flag de la feature de comentarios (la sección solo se renderiza aquí).
+// true = todo activo y cableado al backend real; false = feature oculta entera.
+const COMMENTS_ENABLED = true
 
 // Tipos cuyo CTA de mapa es "Ver ubicación" (no se va "hacia" ellos).
 const DIR_LABEL_TYPES = ['danger', 'road', 'security', 'flood', 'missing', 'lostpet']
@@ -828,34 +831,61 @@ function FlagDialog({
   )
 }
 
-// Comentarios de la comunidad: lista + composer. Etapa 1: datos dummy en memoria
-// (el composer agrega local, reportar marca local). addComment/flagComment se
-// wirean en Etapa 2. El nombre es libre/opcional; React escapa el texto al render.
+// Comentarios de la comunidad: lista + composer, cableado a comments.functions.
+// Auto-publica (sin moderación previa); el botón reportar oculta a los 2 flags.
+// El nombre es libre/opcional; React escapa el texto al render.
 function CommentsSection({ reportId }: { reportId: string }) {
-  const [{ items, loading }] = useState(() => mockList(MOCK_COMMENTS))
-  const [list, setList] = useState<Comment[]>(items)
+  const [list, setList] = useState<CommentRow[]>([])
+  const [loading, setLoading] = useState(true)
   const [text, setText] = useState('')
   const [name, setName] = useState('')
   const [flagged, setFlagged] = useState<Record<string, boolean>>({})
+  const [error, setError] = useState<string | null>(null)
+  const [sending, setSending] = useState(false)
+
+  useEffect(() => {
+    let alive = true
+    setLoading(true)
+    fetchComments({ data: { reportId } })
+      .then((rows) => alive && setList(rows))
+      .catch(() => {})
+      .finally(() => alive && setLoading(false))
+    return () => {
+      alive = false
+    }
+  }, [reportId])
 
   const submit = () => {
     const t = text.trim()
-    if (!t) return
-    setList((l) => [
-      {
-        id: `local-${reportId}-${l.length}`,
-        authorName: name.trim() || null,
-        text: t,
-        createdAt: Date.now(),
-      },
-      ...l,
-    ])
-    setText('')
+    if (!t || sending) return
+    setSending(true)
+    setError(null)
+    // Agrego solo si el server acepta; si rechaza (throttle/oculto) muestro el motivo.
+    addComment({
+      data: { reportId, text: t, authorName: name.trim() || undefined },
+    })
+      .then((r) => {
+        if (r.ok) {
+          setList((l) => [r.comment, ...l])
+          setText('')
+        } else {
+          setError(
+            r.reason === 'rate'
+              ? 'Espera unos segundos antes de comentar de nuevo.'
+              : r.reason === 'missing'
+                ? 'Este reporte ya no está disponible.'
+                : 'No se pudo publicar el comentario.',
+          )
+        }
+      })
+      .catch(() => setError('No se pudo publicar. Revisa tu conexión.'))
+      .finally(() => setSending(false))
   }
 
   const flag = (id: string) => {
     if (flagged[id]) return
     setFlagged((f) => ({ ...f, [id]: true }))
+    flagComment({ data: { id } }).catch(() => {})
   }
 
   return (
@@ -880,7 +910,10 @@ function CommentsSection({ reportId }: { reportId: string }) {
         <div className="flex items-end gap-2">
           <textarea
             value={text}
-            onChange={(e) => setText(e.target.value)}
+            onChange={(e) => {
+              setText(e.target.value)
+              if (error) setError(null)
+            }}
             maxLength={1000}
             rows={1}
             placeholder="Escribe un comentario…"
@@ -889,13 +922,14 @@ function CommentsSection({ reportId }: { reportId: string }) {
           <button
             type="button"
             onClick={submit}
-            disabled={!text.trim()}
+            disabled={!text.trim() || sending}
             aria-label="Enviar comentario"
             className="grid size-[40px] flex-none place-items-center rounded-full bg-lagoon text-white disabled:bg-lagoon-disabled"
           >
             <SendHorizontal className="size-[18px]" />
           </button>
         </div>
+        {error && <p className="mt-2 px-1 text-[13px] text-danger">{error}</p>}
       </div>
 
       {loading ? (

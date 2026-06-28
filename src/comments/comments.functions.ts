@@ -88,9 +88,9 @@ export const addComment = createServerFn({ method: 'POST' })
     }
   })
 
-// Flag comunitario: oculta a los 5 (mismo patrón que flagReport). Audita en
-// moderation_events. Anti-doble-voto en el cliente (localStorage).
-const FLAG_HIDE = 5
+// Flag comunitario: oculta a los 2 reportes (mismo patrón que flagReport). Audita
+// en moderation_events. Anti-doble-voto en el cliente (localStorage).
+const FLAG_HIDE = 2
 export const flagComment = createServerFn({ method: 'POST' })
   .validator((d: { id: string; reason?: string }) => ({
     id: String(d.id),

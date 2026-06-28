@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { BadgeCheck, ChevronLeft, ChevronRight, MapPin, MessageCircle } from 'lucide-react'
+import { BadgeCheck, ChevronLeft, ChevronRight, MapPin } from 'lucide-react'
 import { fmtAge, typeOf } from '../../reports/reports'
 import { fetchFeed, fetchTypeCounts } from '../../reports/reports.functions'
 import type { FeedItem, TypeCounts } from '../../reports/reports.functions'
@@ -227,27 +227,13 @@ export function FeedScreen({ onSelect }: { onSelect: (id: string) => void }) {
   )
 }
 
-// ponytail: comentarios ocultos por ahora (acordado). Mismo flag en report-detail.tsx;
-// poner en true para volver a mostrar el counter en la card.
-const COMMENTS_ENABLED = false
-
-// Etapa 1: el backend de comentarios está parqueado (sin conteo por reporte). Para
-// revisar el layout de la card mostramos un conteo mock determinista por id; E2 lo
-// reemplaza con el conteo real de la tabla comments. [[mock]]
-function mockCommentCount(id: string): number {
-  let h = 0
-  for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) >>> 0
-  return h % 14
-}
-
-// Card del feed: fila superior (marca + tipo + dirección + tiempo), título,
-// portada a ancho completo, y comentarios solo si hay (sin icono en 0). La
-// procedencia (verificado/comunidad) vive en el detalle, no en la lista. La
-// dirección sale del meta (feedAddress); el conteo es mock en Etapa 1 (backend
-// parqueado). Compartida con StackDrawer (apilados de un punto).
+// Card del feed: fila superior (marca + tipo + dirección + tiempo), título y
+// portada a ancho completo. La procedencia (verificado/comunidad) vive en el
+// detalle, no en la lista. La dirección sale del meta (feedAddress). El conteo de
+// comentarios por card se omite hasta que fetchFeed lo devuelva real (no mock).
+// Compartida con StackDrawer (apilados de un punto).
 export function ReportCard({ item, onClick }: { item: FeedItem; onClick: () => void }) {
   const meta = typeOf(item.type)
-  const comments = mockCommentCount(item.id)
   return (
     <button
       type="button"
@@ -304,13 +290,7 @@ export function ReportCard({ item, onClick }: { item: FeedItem; onClick: () => v
         </div>
       )}
 
-      {COMMENTS_ENABLED && comments > 0 ? (
-        <div className="flex items-center gap-1.5 px-3 py-2.5 text-[13px] font-semibold text-ink-muted">
-          <MessageCircle className="size-[16px]" /> {comments}
-        </div>
-      ) : (
-        <div className="h-3" />
-      )}
+      <div className="h-3" />
     </button>
   )
 }
