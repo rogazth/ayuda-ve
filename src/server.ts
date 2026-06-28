@@ -2,8 +2,6 @@ import {
   createStartHandler,
   defaultStreamHandler,
 } from '@tanstack/react-start/server'
-import { runDamageScrape } from './scraper/damage'
-import { runScrape } from './scraper/run'
 import { computeQuakes } from './quakes/quakes.functions'
 import { getDb } from './db'
 import { quakeSnapshot } from './db/schema'
@@ -34,10 +32,9 @@ export default {
     _env: unknown,
     ctx: ExecutionContext,
   ) {
-    ctx.waitUntil(runScrape())
-    ctx.waitUntil(runDamageScrape())
-    // snapshot de sismos: computa desde USGS/FUNVISIS una vez y lo guarda en D1
-    // para que el load lo lea local (heatmap en el primer paint, sin fetch externo).
+    // El scraping vive en el admin Laravel (cold path) → POST /internal/ingest.
+    // Acá solo queda el snapshot de sismos: computa desde USGS/FUNVISIS una vez y lo
+    // guarda en D1 para que el load lo lea local (sin fetch externo en el primer paint).
     ctx.waitUntil(refreshQuakeSnapshot())
   },
 }

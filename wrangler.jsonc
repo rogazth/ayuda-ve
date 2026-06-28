@@ -5,11 +5,9 @@
   "compatibility_flags": ["nodejs_compat"],
   "main": "./src/server.ts",
   "triggers": {
-    // cada 2 min: barre el backlog de ~48k desaparecidos (página 1 en vivo +
-    // ventana rotatoria, ~8h por pasada) y refresca daños. Corre runScrape() +
-    // runDamageScrape(). Si cambias este intervalo, ajusta CRON_MS en
-    // desaparecidosterremoto.ts (de ahí sale la posición del cursor).
-    "crons": ["*/2 * * * *"],
+    // cada 5 min: solo refresca el snapshot de sismos (USGS/FUNVISIS → quake_snapshot).
+    // El scraping se movió al admin Laravel (cold path) → POST /internal/ingest.
+    "crons": ["*/5 * * * *"],
   },
   "d1_databases": [
     {

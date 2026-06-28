@@ -16,7 +16,6 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as MediaSplatRouteImport } from './routes/media.$'
 import { Route as InternalQuakeImageRouteImport } from './routes/internal.quake-image'
 import { Route as InternalIngestRouteImport } from './routes/internal.ingest'
-import { Route as ApiScrapeRouteImport } from './routes/api.scrape'
 import { Route as ApiReportsIdPhotosRouteImport } from './routes/api.reports.$id.photos'
 
 const SitemapDotxmlRoute = SitemapDotxmlRouteImport.update({
@@ -55,11 +54,6 @@ const InternalIngestRoute = InternalIngestRouteImport.update({
   path: '/internal/ingest',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ApiScrapeRoute = ApiScrapeRouteImport.update({
-  id: '/api/scrape',
-  path: '/api/scrape',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const ApiReportsIdPhotosRoute = ApiReportsIdPhotosRouteImport.update({
   id: '/api/reports/$id/photos',
   path: '/api/reports/$id/photos',
@@ -71,7 +65,6 @@ export interface FileRoutesByFullPath {
   '/numeros-emergencia-venezuela': typeof NumerosEmergenciaVenezuelaRoute
   '/personas-desaparecidas': typeof PersonasDesaparecidasRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
-  '/api/scrape': typeof ApiScrapeRoute
   '/internal/ingest': typeof InternalIngestRoute
   '/internal/quake-image': typeof InternalQuakeImageRoute
   '/media/$': typeof MediaSplatRoute
@@ -82,7 +75,6 @@ export interface FileRoutesByTo {
   '/numeros-emergencia-venezuela': typeof NumerosEmergenciaVenezuelaRoute
   '/personas-desaparecidas': typeof PersonasDesaparecidasRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
-  '/api/scrape': typeof ApiScrapeRoute
   '/internal/ingest': typeof InternalIngestRoute
   '/internal/quake-image': typeof InternalQuakeImageRoute
   '/media/$': typeof MediaSplatRoute
@@ -94,7 +86,6 @@ export interface FileRoutesById {
   '/numeros-emergencia-venezuela': typeof NumerosEmergenciaVenezuelaRoute
   '/personas-desaparecidas': typeof PersonasDesaparecidasRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
-  '/api/scrape': typeof ApiScrapeRoute
   '/internal/ingest': typeof InternalIngestRoute
   '/internal/quake-image': typeof InternalQuakeImageRoute
   '/media/$': typeof MediaSplatRoute
@@ -107,7 +98,6 @@ export interface FileRouteTypes {
     | '/numeros-emergencia-venezuela'
     | '/personas-desaparecidas'
     | '/sitemap.xml'
-    | '/api/scrape'
     | '/internal/ingest'
     | '/internal/quake-image'
     | '/media/$'
@@ -118,7 +108,6 @@ export interface FileRouteTypes {
     | '/numeros-emergencia-venezuela'
     | '/personas-desaparecidas'
     | '/sitemap.xml'
-    | '/api/scrape'
     | '/internal/ingest'
     | '/internal/quake-image'
     | '/media/$'
@@ -129,7 +118,6 @@ export interface FileRouteTypes {
     | '/numeros-emergencia-venezuela'
     | '/personas-desaparecidas'
     | '/sitemap.xml'
-    | '/api/scrape'
     | '/internal/ingest'
     | '/internal/quake-image'
     | '/media/$'
@@ -141,7 +129,6 @@ export interface RootRouteChildren {
   NumerosEmergenciaVenezuelaRoute: typeof NumerosEmergenciaVenezuelaRoute
   PersonasDesaparecidasRoute: typeof PersonasDesaparecidasRoute
   SitemapDotxmlRoute: typeof SitemapDotxmlRoute
-  ApiScrapeRoute: typeof ApiScrapeRoute
   InternalIngestRoute: typeof InternalIngestRoute
   InternalQuakeImageRoute: typeof InternalQuakeImageRoute
   MediaSplatRoute: typeof MediaSplatRoute
@@ -199,13 +186,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof InternalIngestRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/api/scrape': {
-      id: '/api/scrape'
-      path: '/api/scrape'
-      fullPath: '/api/scrape'
-      preLoaderRoute: typeof ApiScrapeRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/api/reports/$id/photos': {
       id: '/api/reports/$id/photos'
       path: '/api/reports/$id/photos'
@@ -221,7 +201,6 @@ const rootRouteChildren: RootRouteChildren = {
   NumerosEmergenciaVenezuelaRoute: NumerosEmergenciaVenezuelaRoute,
   PersonasDesaparecidasRoute: PersonasDesaparecidasRoute,
   SitemapDotxmlRoute: SitemapDotxmlRoute,
-  ApiScrapeRoute: ApiScrapeRoute,
   InternalIngestRoute: InternalIngestRoute,
   InternalQuakeImageRoute: InternalQuakeImageRoute,
   MediaSplatRoute: MediaSplatRoute,
