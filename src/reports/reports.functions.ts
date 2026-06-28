@@ -17,7 +17,7 @@ const SECURITY_TTL_MS = 24 * 60 * 60 * 1000
 const mediaUrl = (key: string) =>
   import.meta.env.DEV ? `/media/${key}` : `https://media.ayudave.com/${key}`
 
-export type Bounds = { s: number; n: number; w: number; e: number; types?: string[] }
+export type Bounds = { s: number; n: number; w: number; e: number }
 
 // Columnas mínimas del pin: mismo payload para el bbox y el seed.
 const pinCols = {
@@ -80,10 +80,6 @@ export const fetchReportsInBounds = createServerFn({ method: 'GET' })
       n: Number(b.n),
       w: Number(b.w),
       e: Number(b.e),
-      // filtro opcional por tipo (zoom-out global pide solo 'support'); whitelist
-      types: Array.isArray(b.types)
-        ? b.types.map(String).filter((t) => Object.hasOwn(TYPES, t))
-        : undefined,
     }),
   )
   .handler(async ({ data }) => {
@@ -95,8 +91,7 @@ export const fetchReportsInBounds = createServerFn({ method: 'GET' })
     const n = Math.ceil(data.n / G) * G
     const w = Math.floor(data.w / G) * G
     const e = Math.ceil(data.e / G) * G
-    const typeFilter = data.types?.length ? data.types : null
-    const key = `bbox-${s.toFixed(1)}_${n.toFixed(1)}_${w.toFixed(1)}_${e.toFixed(1)}${typeFilter ? `_${typeFilter.join(',')}` : ''}`
+    const key = `bbox-${s.toFixed(1)}_${n.toFixed(1)}_${w.toFixed(1)}_${e.toFixed(1)}`
 
     // TTL 30s: el poll (30s) puede ver un reporte nuevo con hasta ~30s de retraso
     // (el beep tarda un ciclo). ponytail: si urge inmediatez, poll incremental
@@ -127,7 +122,6 @@ export const fetchReportsInBounds = createServerFn({ method: 'GET' })
         .where(
           and(
             ...visibleFreshConds(),
-            ...(typeFilter ? [inArray(reports.type, typeFilter)] : []),
             gte(reports.lat, s),
             lte(reports.lat, n),
             gte(reports.lng, w),

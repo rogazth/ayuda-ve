@@ -74,7 +74,6 @@ const POLL_MS = 30_000
 const FRESH_NEW_MS = 2 * 60_000
 
 const DEFAULT_ZOOM = 15
-const MIN_ZOOM = 6 // ponytail: bbox ilimitado es fine — la tabla es pequeña y el índice cubre todo
 // Pedimos un área 50% mayor que el viewport: pans cortos quedan dentro del buffer
 // → sin refetch ni rebuild del cluster, el drag se siente fluido.
 const BUFFER = 0.5
@@ -176,27 +175,20 @@ function MapController({
   const map = useMap()
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const reqId = useRef(0)
-  // Área (con buffer) + modo para el que ya tenemos pines montados. Mientras el
-  // viewport quepa dentro y el modo no cambie, no re-pedimos ni reconstruimos el cluster.
-  const loaded = useRef<{ bounds: L.LatLngBounds; supportOnly: boolean } | null>(null)
+  // Área (con buffer) para la que ya tenemos pines montados. Mientras el viewport
+  // quepa dentro, no re-pedimos ni reconstruimos el cluster.
+  const loaded = useRef<L.LatLngBounds | null>(null)
 
   const load = useCallback(
     (announce: boolean, force = false) => {
       const c = map.getCenter()
       const center: [number, number] = [c.lat, c.lng]
-      // Zoom-out: traer SOLO centros de acopio (677, liviano, cobertura mundial)
-      // en vez de blanquear el mapa. A zoom de detalle, todos los tipos del viewport
-      // (los ~52k desaparecidos no tienen sentido —ni rinden— a escala continental).
-      const supportOnly = map.getZoom() < MIN_ZOOM
       const vb = map.getBounds()
-      // Viewport dentro del buffer ya cargado y mismo modo → solo paneamos sobre los
-      // marcadores existentes. Sin fetch ni rebuild: esto hace fluido el drag.
-      if (
-        !force &&
-        loaded.current?.supportOnly === supportOnly &&
-        loaded.current.bounds.contains(vb)
-      )
-        return
+      // Sin corte por zoom: 54k reportes colapsan a ~1.9k coords (GROUP BY lat,lng),
+      // así que el bbox mundial rinde igual. Alejar muestra TODO (acopios del exterior
+      // incluidos) y el contador del cluster refleja el total real.
+      // Viewport dentro del buffer ya cargado → solo paneamos. Sin fetch ni rebuild.
+      if (!force && loaded.current?.contains(vb)) return
       const area = vb.pad(BUFFER)
       const id = ++reqId.current
       fetchReportsInBounds({
@@ -205,12 +197,11 @@ function MapController({
           n: area.getNorth(),
           w: area.getWest(),
           e: area.getEast(),
-          types: supportOnly ? ['support'] : undefined,
         },
       })
         .then((pins) => {
           if (id !== reqId.current) return
-          loaded.current = { bounds: area, supportOnly }
+          loaded.current = area
           onData({ pins, center, tooFar: false, announce })
         })
         .catch(() => {
@@ -272,14 +263,8 @@ const PinsLayer = memo(function PinsLayer({
   onSelect: (id: string) => void
   onStack: (p: Pin) => void
 }) {
-  // El cluster se remonta SOLO al cambiar de "scope": todo-tipos (detalle) ↔ solo
-  // acopios (zoom-out global). react-leaflet-cluster no purga limpio los marcadores
-  // viejos al intercambiar dataset entero → dejaba un cluster fantasma. La key estable
-  // dentro de un scope conserva el pan fluido (no remonta al panear).
-  const scope = pins.length > 0 && pins.every((p) => p.type === 'support') ? 'support' : 'mixed'
   return (
     <MarkerClusterGroup
-      key={scope}
       maxClusterRadius={50}
       showCoverageOnHover={false}
       chunkedLoading
@@ -558,7 +543,15 @@ export default function MapScreen({
       {/* Etapa 1: el CTA "Ver reporte" de una notificación lleva al feed (los
           reportId mock no existen en DB); E2 lo abre directo con setSelectedId. */}
       {tab === 'avisos' && <AvisosScreen onOpenReport={() => setTab('reportes')} />}
-      {tab === 'ayudar' && <ComoAyudarScreen />}
+      {tab === 'ayudar' && (
+        <ComoAyudarScreen
+          onShowOnMap={(c) => {
+            setTab('mapa')
+            mapRef.current?.setView([c.lat, c.lng], DEFAULT_ZOOM)
+            setSelectedId(c.id) // abre el detalle del acopio
+          }}
+        />
+      )}
       {tab === 'mas' && (
         <MasScreen
           onComoAyudar={() => setTab('ayudar')}

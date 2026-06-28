@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Popover } from 'radix-ui'
-import { Check, ChevronsUpDown, Map as MapIcon, MapPin, Phone, Search } from 'lucide-react'
+import { Check, ChevronsUpDown, ExternalLink, Instagram, Map as MapIcon, MapPin, Phone, Search } from 'lucide-react'
 import { fetchAidCenters } from '../../reports/reports.functions'
 import type { AidCenter } from '../../reports/reports.functions'
 import { HelpUsCard } from './help-us-card'
@@ -13,7 +13,7 @@ const PAGE = 80
 // "Cómo ayudar": selector de país + centros de acopio. Sin país elegido muestra
 // TODOS; pre-selecciona el país del visitante (CF-IPCountry) si tenemos centros ahí.
 // Es una tab (panel bajo el nav): se sale por el bottom-nav, sin botón de cerrar.
-export function ComoAyudarScreen() {
+export function ComoAyudarScreen({ onShowOnMap }: { onShowOnMap?: (c: AidCenter) => void }) {
   const [data, setData] = useState<{ centers: AidCenter[]; suggested: string | null } | null>(null)
   const [country, setCountry] = useState<string | null>(null)
   const [limit, setLimit] = useState(PAGE)
@@ -82,7 +82,7 @@ export function ComoAyudarScreen() {
                 : `${shown.length} centros en todos los países · elegí uno para filtrar`}
             </p>
             {visible.map((c) => (
-              <AidCard key={c.id} c={c} />
+              <AidCard key={c.id} c={c} onShow={() => onShowOnMap?.(c)} />
             ))}
             {shown.length > visible.length && (
               <button
@@ -203,7 +203,24 @@ function CountryCombobox({
   )
 }
 
-function AidCard({ c }: { c: AidCenter }) {
+// El contacto de un acopio puede ser teléfono, handle de IG (@x) o URL — no siempre
+// un número. Devolvemos el link correcto + ícono/label, o null si no es accionable
+// (antes se forzaba tel: y rompía con los handles de Instagram).
+function contactLink(raw: string): { href: string; label: string; icon: 'phone' | 'ig' | 'web' } | null {
+  const s = raw.trim()
+  if (!s) return null
+  if (/^https?:\/\//i.test(s)) return { href: s, label: 'Web', icon: 'web' }
+  if (s.startsWith('@'))
+    return { href: `https://instagram.com/${s.slice(1).replace(/[^\w.]/g, '')}`, label: 'Instagram', icon: 'ig' }
+  const digits = s.replace(/[^\d+]/g, '')
+  if (digits.replace(/\D/g, '').length >= 7) return { href: `tel:${digits}`, label: 'Llamar', icon: 'phone' }
+  if (/^[\w.]+$/.test(s)) return { href: `https://instagram.com/${s}`, label: 'Instagram', icon: 'ig' }
+  return null
+}
+
+function AidCard({ c, onShow }: { c: AidCenter; onShow: () => void }) {
+  const contact = c.contact ? contactLink(c.contact) : null
+  const ContactIcon = contact?.icon === 'ig' ? Instagram : contact?.icon === 'web' ? ExternalLink : Phone
   return (
     <article className="mb-3 rounded-2xl border border-line bg-white p-3.5">
       <div className="flex items-center gap-2">
@@ -233,16 +250,19 @@ function AidCard({ c }: { c: AidCenter }) {
       <div className="mt-3 flex gap-2.5">
         <button
           type="button"
+          onClick={onShow}
           className="flex h-10 flex-1 items-center justify-center gap-1.5 rounded-[10px] bg-lagoon text-[13.5px] font-bold text-white"
         >
           <MapIcon className="size-4" /> Ver en mapa
         </button>
-        {c.contact ? (
+        {contact ? (
           <a
-            href={`tel:${c.contact.replace(/[^\d+]/g, '')}`}
+            href={contact.href}
+            target={contact.icon === 'phone' ? undefined : '_blank'}
+            rel={contact.icon === 'phone' ? undefined : 'noopener'}
             className="flex h-10 flex-1 items-center justify-center gap-1.5 rounded-[10px] border border-line bg-white text-[13.5px] font-bold text-ink no-underline"
           >
-            <Phone className="size-4" /> Contacto
+            <ContactIcon className="size-4" /> {contact.label}
           </a>
         ) : (
           <button
