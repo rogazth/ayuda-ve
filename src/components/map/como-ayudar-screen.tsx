@@ -1,26 +1,23 @@
 import { useState } from 'react'
-import { Map as MapIcon, MapPin, Phone, Search } from 'lucide-react'
+import { Popover } from 'radix-ui'
+import { Check, ChevronsUpDown, Map as MapIcon, MapPin, Phone, Search } from 'lucide-react'
 import { MOCK_AID_CENTERS, mockList, type AidCenter } from '../../mock'
 import { HelpUsCard } from './help-us-card'
 import { TelegramCta } from '../telegram-cta'
 
-// "Cómo ayudar" (POC G): directorio buscable de centros de acopio en el exterior
-// + mini-mapa acotado. Etapa 1: datos dummy (?mock=) — la tabla aid_centers y la
-// búsqueda Mapbox se wirean en Etapa 2. Es una tab (panel bajo el nav, igual que
-// Reportes): se sale por el bottom-nav, sin botón de cerrar.
-const SEGMENTS = ['Centros de acopio', 'Donar', 'Qué se necesita'] as const
-type Seg = (typeof SEGMENTS)[number]
-
+// "Cómo ayudar" (POC G): selector de país + centros de acopio del país elegido.
+// Etapa 1: datos dummy (?mock=) — la tabla aid_centers se wirea en Etapa 2.
+// Es una tab (panel bajo el nav): se sale por el bottom-nav, sin botón de cerrar.
 export function ComoAyudarScreen() {
-  const [seg, setSeg] = useState<Seg>('Centros de acopio')
-  const [q, setQ] = useState('')
   const [{ items, loading }] = useState(() => mockList(MOCK_AID_CENTERS))
 
-  const shown = q.trim()
-    ? items.filter((c) =>
-        `${c.name} ${c.city} ${c.country}`.toLowerCase().includes(q.toLowerCase()),
-      )
-    : items
+  // ponytail: países derivados de los centros; en E2 vendrán del backend.
+  const countries = Array.from(
+    new Map(items.map((c) => [c.country, c.flag])).entries(),
+  ).sort((a, b) => a[0].localeCompare(b[0]))
+
+  const [country, setCountry] = useState<string | null>(null)
+  const shown = country ? items.filter((c) => c.country === country) : []
 
   return (
     <div className="fixed inset-0 z-[820] flex flex-col bg-surface-muted">
@@ -28,94 +25,42 @@ export function ComoAyudarScreen() {
         className="flex-none border-b border-line bg-white"
         style={{ paddingTop: 'max(12px, env(safe-area-inset-top))' }}
       >
-        <h1 className="px-4 pb-3 text-[20px] font-extrabold text-ink">
-          Cómo ayudar
-        </h1>
+        <h1 className="px-4 pb-3 text-[20px] font-extrabold text-ink">Cómo ayudar</h1>
       </header>
 
-      <div className="flex flex-none gap-1.5 border-b border-line bg-white px-4 py-3">
-        {SEGMENTS.map((s) => (
-          <button
-            key={s}
-            type="button"
-            onClick={() => setSeg(s)}
-            className={`h-[38px] flex-1 rounded-full border text-[13px] font-bold ${
-              seg === s
-                ? 'border-ink bg-ink text-white'
-                : 'border-line bg-white text-ink-body'
-            }`}
-          >
-            {s}
-          </button>
-        ))}
+      <div className="flex-none border-b border-line bg-white px-4 py-3">
+        <CountryCombobox
+          countries={countries}
+          value={country}
+          onChange={setCountry}
+        />
       </div>
 
       <div
         className="flex-1 overflow-y-auto"
         style={{ paddingBottom: 'calc(88px + env(safe-area-inset-bottom))' }}
       >
-        {seg === 'Centros de acopio' ? (
-          <>
-            <div className="mx-4 mt-3.5 flex items-center gap-2.5 rounded-xl border border-line bg-white px-3.5 py-3 text-ink-muted">
-              <Search className="size-[18px] flex-none" />
-              <input
-                value={q}
-                onChange={(e) => setQ(e.target.value)}
-                placeholder="Buscar país o ciudad…"
-                className="w-full bg-transparent text-[14px] text-ink outline-none placeholder:text-ink-muted"
-              />
-            </div>
-
-            {/* Mini-mapa acotado: decorativo (no monta Leaflet). En E2 = mapa real
-                con maxBounds estrechos o imagen estática. */}
-            <div
-              className="relative mx-4 mt-3 h-[130px] overflow-hidden rounded-2xl border border-line"
-              style={{
-                background:
-                  'repeating-linear-gradient(90deg,transparent 0 40px,rgba(120,128,124,.14) 40px 41px),repeating-linear-gradient(0deg,transparent 0 44px,rgba(120,128,124,.1) 44px 45px),#e9ecef',
-              }}
-            >
-              {[
-                [80, 70],
-                [180, 50],
-                [250, 95],
-              ].map(([x, y], i) => (
-                <span
-                  key={i}
-                  className="absolute grid size-6 place-items-center rounded-[50%_50%_50%_4px] bg-lagoon shadow-[0_3px_5px_rgba(20,30,30,0.3)]"
-                  style={{ left: x, top: y, transform: 'translate(-50%,-100%) rotate(45deg)' }}
-                >
-                  <MapPin className="size-3 text-white" style={{ transform: 'rotate(-45deg)' }} />
-                </span>
-              ))}
-            </div>
-
-            {loading ? (
-              <p className="py-6 text-center text-[13px] text-ink-faint">Cargando…</p>
-            ) : shown.length === 0 ? (
-              <div className="mt-16 grid place-items-center px-8 text-center">
-                <MapPin className="size-10 text-ink-faint" />
-                <p className="mt-3 text-[14px] text-ink-muted">
-                  {q
-                    ? 'No encontramos centros para esa búsqueda.'
-                    : 'Aún no hay centros de acopio.'}
-                </p>
-              </div>
-            ) : (
-              <div className="px-4 pt-3">
-                {shown.map((c) => (
-                  <AidCard key={c.id} c={c} />
-                ))}
-              </div>
-            )}
-          </>
-        ) : (
+        {loading ? (
+          <p className="py-6 text-center text-[13px] text-ink-faint">Cargando…</p>
+        ) : !country ? (
           <div className="mt-16 grid place-items-center px-8 text-center">
-            <p className="text-[14px] text-ink-muted">
-              {seg === 'Donar'
-                ? 'Canales de donación verificados — próximamente.'
-                : 'Lista de lo que más se necesita — próximamente.'}
+            <MapPin className="size-10 text-ink-faint" />
+            <p className="mt-3 text-[14px] text-ink-muted">
+              Elegí un país para ver sus centros de acopio.
             </p>
+          </div>
+        ) : shown.length === 0 ? (
+          <div className="mt-16 grid place-items-center px-8 text-center">
+            <MapPin className="size-10 text-ink-faint" />
+            <p className="mt-3 text-[14px] text-ink-muted">
+              Aún no hay centros de acopio en {country}.
+            </p>
+          </div>
+        ) : (
+          <div className="px-4 pt-3">
+            {shown.map((c) => (
+              <AidCard key={c.id} c={c} />
+            ))}
           </div>
         )}
 
@@ -125,6 +70,88 @@ export function ComoAyudarScreen() {
         </div>
       </div>
     </div>
+  )
+}
+
+function CountryCombobox({
+  countries,
+  value,
+  onChange,
+}: {
+  countries: [string, string][]
+  value: string | null
+  onChange: (c: string) => void
+}) {
+  const [open, setOpen] = useState(false)
+  const [q, setQ] = useState('')
+  const filtered = q.trim()
+    ? countries.filter(([name]) => name.toLowerCase().includes(q.toLowerCase()))
+    : countries
+  const flag = value && countries.find(([n]) => n === value)?.[1]
+
+  return (
+    <Popover.Root
+      open={open}
+      onOpenChange={(o) => {
+        setOpen(o)
+        if (!o) setQ('')
+      }}
+    >
+      <Popover.Trigger asChild>
+        <button
+          type="button"
+          className="flex w-full items-center gap-2 rounded-xl border border-line bg-white px-3.5 py-3 text-left text-[14px] text-ink"
+        >
+          {flag && <span className="text-[18px]">{flag}</span>}
+          <span className={value ? '' : 'text-ink-muted'}>
+            {value ?? 'Seleccioná un país'}
+          </span>
+          <ChevronsUpDown className="ml-auto size-[18px] flex-none text-ink-muted" />
+        </button>
+      </Popover.Trigger>
+      <Popover.Portal>
+        <Popover.Content
+          align="start"
+          sideOffset={6}
+          className="z-[900] w-[var(--radix-popover-trigger-width)] overflow-hidden rounded-xl border border-line bg-white shadow-lg"
+        >
+          <div className="flex items-center gap-2.5 border-b border-line px-3.5 py-2.5 text-ink-muted">
+            <Search className="size-[18px] flex-none" />
+            <input
+              autoFocus
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+              placeholder="Buscar país…"
+              className="w-full bg-transparent text-[14px] text-ink outline-none placeholder:text-ink-muted"
+            />
+          </div>
+          <div className="max-h-[260px] overflow-y-auto py-1">
+            {filtered.length === 0 ? (
+              <p className="px-3.5 py-3 text-[13px] text-ink-muted">Sin resultados.</p>
+            ) : (
+              filtered.map(([name, f]) => (
+                <button
+                  key={name}
+                  type="button"
+                  onClick={() => {
+                    onChange(name)
+                    setOpen(false)
+                    setQ('')
+                  }}
+                  className="flex w-full items-center gap-2 px-3.5 py-2.5 text-left text-[14px] text-ink hover:bg-surface-muted"
+                >
+                  <span className="text-[18px]">{f}</span>
+                  <span>{name}</span>
+                  {value === name && (
+                    <Check className="ml-auto size-[18px] flex-none text-lagoon" />
+                  )}
+                </button>
+              ))
+            )}
+          </div>
+        </Popover.Content>
+      </Popover.Portal>
+    </Popover.Root>
   )
 }
 
