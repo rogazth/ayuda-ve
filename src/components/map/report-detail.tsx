@@ -121,7 +121,7 @@ function PhotoSlider({ photos }: { photos: string[] }) {
             src={photos[0]}
             alt=""
             onClick={() => setLightbox(0)}
-            className="h-[200px] w-full cursor-pointer rounded-2xl bg-surface-muted object-cover"
+            className="h-[280px] w-full cursor-pointer rounded-2xl bg-surface-muted object-cover"
           />
         </div>
         {lightbox !== null && (
@@ -142,7 +142,7 @@ function PhotoSlider({ photos }: { photos: string[] }) {
               const el = e.currentTarget
               setActive(Math.round(el.scrollLeft / el.clientWidth))
             }}
-            className="flex h-[200px] w-full snap-x snap-mandatory overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+            className="flex h-[280px] w-full snap-x snap-mandatory overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
           >
             {photos.map((src, i) => (
               <img

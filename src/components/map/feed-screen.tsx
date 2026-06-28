@@ -280,7 +280,7 @@ export function ReportCard({ item, onClick }: { item: FeedItem; onClick: () => v
             src={item.cover}
             alt=""
             loading="lazy"
-            className="h-[210px] w-full bg-surface-muted object-cover"
+            className="h-[280px] w-full bg-surface-muted object-cover"
           />
           {item.mediaCount > 1 && (
             <span className="absolute right-2 bottom-2 rounded-md bg-black/60 px-1.5 py-0.5 text-[11px] font-bold text-white">
