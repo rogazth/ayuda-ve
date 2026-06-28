@@ -55,11 +55,9 @@ export const reports = sqliteTable(
     // SQLite trata NULLs como distintos, así que las filas de usuario
     // (ambos null) nunca colisionan; solo las scrapeadas comparten clave.
     uniqueIndex('reports_external').on(t.externalSource, t.externalId),
-    // Cola del espejo a Telegram: solo pendientes de usuario. Índice parcial →
-    // el cron no escanea toda la tabla (que crece con scrapeados ya notificados).
-    index('reports_unnotified')
-      .on(t.createdAt)
-      .where(sql`notified_at IS NULL AND external_source IS NULL`),
+    // Cola del espejo a Telegram: pendientes de envío (usuario + scrapers).
+    // Índice parcial → el cron lee solo las no-enviadas, no las 71k de la tabla.
+    index('reports_unnotified').on(t.createdAt).where(sql`notified_at IS NULL`),
   ],
 )
 

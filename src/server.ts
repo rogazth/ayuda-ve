@@ -27,10 +27,9 @@ async function refreshQuakeSnapshot() {
     })
 }
 
-// Espejo de reportes a Telegram (@ayudave_reportes). Solo submissions de usuario
-// (external_source IS NULL), visibles, una sola vez. notified_at se estampa SOLO
-// tras el 200 de Telegram → un fallo se reintenta solo en el próximo tick (retry
-// gratis, sin cola). Los scrapeados quedan fuera por el filtro de external_source.
+// Espejo de reportes a Telegram (@ayudave_reportes): todo reporte nuevo visible
+// (usuario + scrapers), una sola vez. notified_at se estampa SOLO tras el 200 de
+// Telegram → un fallo se reintenta solo en el próximo tick (retry gratis, sin cola).
 const TELEGRAM_TYPE_LABEL: Record<string, string> = {
   trapped: '🆘 Persona atrapada',
   missing: '👤 Persona desaparecida',
@@ -66,13 +65,12 @@ async function flushTelegram() {
     .from(reports)
     .where(
       and(
-        isNull(reports.externalSource), // solo submissions web (no scrapeados)
         isNull(reports.notifiedAt), // solo lo no enviado
-        eq(reports.status, 'visible'), // solo publicado
+        eq(reports.status, 'visible'), // solo publicado (excluye hidden/found)
       ),
     )
     .orderBy(asc(reports.createdAt))
-    .limit(10) // ponytail: pacea bajo el límite ~20 msg/min de Telegram; subir si los reportes lo superan
+    .limit(15) // ponytail: 15/tick = 180/h, sobre los ~76/h de carga y bajo el límite ~20/min del canal; subir si el scraper bursea más
 
   for (const r of pending) {
     // globalThis.fetch: el `const fetch` del módulo (línea ~12) es el handler del
