@@ -155,47 +155,54 @@ export const fetchSeedReports = createServerFn({ method: 'GET' }).handler(
     }),
 )
 
-export type StackItem = {
-  id: string
-  type: string
-  title: string
-  createdAt: number
-}
-
 // Lista de reportes apilados en una coordenada (el bbox la colapsa a un punto con
-// n). Se pide al tocar la burbuja. Columnas livianas (sin meta/fotos): el detalle
-// completo lo trae fetchReport al elegir uno. Epsilon en vez de igualdad exacta de
-// float por robustez al round-trip del double por JSON. Cacheado: un punto caliente
+// n). Se pide al tocar la burbuja y se pinta con la misma card del feed (FeedItem:
+// portada + nº de fotos + dirección). Epsilon en vez de igualdad exacta de float
+// por robustez al round-trip del double por JSON. Cacheado: un punto caliente
 // (Caracas) lo tocan muchos y la query barre miles de filas.
 export const fetchReportsAtPoint = createServerFn({ method: 'GET' })
   .validator((d: { lat: number; lng: number }) => ({
     lat: Number(d.lat),
     lng: Number(d.lng),
   }))
-  .handler(async ({ data }): Promise<StackItem[]> => {
+  .handler(async ({ data }): Promise<FeedItem[]> => {
     const E = 1e-6
     const key = `pt-${data.lat.toFixed(4)}_${data.lng.toFixed(4)}`
     return edgeCached(key, 60, async () => {
       const db = getDb()
+      const pointConds = [
+        ...visibleFreshConds(),
+        gte(reports.lat, data.lat - E),
+        lte(reports.lat, data.lat + E),
+        gte(reports.lng, data.lng - E),
+        lte(reports.lng, data.lng + E),
+      ]
       const rows = await db
         .select({
           id: reports.id,
           type: reports.type,
           title: reports.title,
+          confirms: reports.confirms,
+          verified: reports.verified,
+          status: reports.status,
           createdAt: reports.createdAt,
+          meta: reports.meta,
         })
         .from(reports)
-        .where(
-          and(
-            ...visibleFreshConds(),
-            gte(reports.lat, data.lat - E),
-            lte(reports.lat, data.lat + E),
-            gte(reports.lng, data.lng - E),
-            lte(reports.lng, data.lng + E),
-          ),
-        )
+        .where(and(...pointConds))
         .orderBy(desc(reports.createdAt))
-      return rows.map((r) => ({ ...r, createdAt: r.createdAt.getTime() }))
+      if (!rows.length) return []
+      // Media por el mismo predicado de punto (join), no por lista de ids: un punto
+      // caliente apila miles de reportes y un IN con miles de ids revienta el límite
+      // de parámetros de D1. ponytail: si un punto se vuelve pesado, paginar el
+      // apilado; hoy se trae todo para que ningún reporte quede inalcanzable.
+      const mediaRows = await db
+        .select({ reportId: media.reportId, key: media.key, position: media.position })
+        .from(media)
+        .innerJoin(reports, eq(media.reportId, reports.id))
+        .where(and(...pointConds))
+      const byReport = groupMedia(mediaRows)
+      return rows.map((r) => toFeedItem(r, byReport.get(r.id) ?? []))
     })
   })
 
@@ -230,6 +237,50 @@ function feedAddress(metaRaw: string | null): string | null {
     /* meta corrupto: la card va sin dirección */
   }
   return null
+}
+
+// Agrupa filas de media por reporte (portada = la de menor position).
+function groupMedia(rows: { reportId: string; key: string; position: number }[]) {
+  const m = new Map<string, { key: string; position: number }[]>()
+  for (const x of rows) {
+    const arr = m.get(x.reportId)
+    if (arr) arr.push(x)
+    else m.set(x.reportId, [x])
+  }
+  return m
+}
+
+// Arma un FeedItem desde la fila del reporte + sus medias. Portada = position
+// mínima; mediaCount = total. Compartido por el feed y los apilados.
+function toFeedItem(
+  r: {
+    id: string
+    type: string
+    title: string
+    confirms: number
+    verified: boolean
+    status: string
+    createdAt: Date
+    meta: string | null
+  },
+  ms: { key: string; position: number }[],
+): FeedItem {
+  const cover = ms.reduce<(typeof ms)[number] | null>(
+    (a, m) => (!a || m.position < a.position ? m : a),
+    null,
+  )
+  return {
+    id: r.id,
+    type: r.type,
+    title: r.title,
+    confirms: r.confirms,
+    verified: r.verified,
+    status: r.status,
+    createdAt: r.createdAt.getTime(),
+    cover: cover ? mediaUrl(cover.key) : null,
+    mediaCount: ms.length,
+    address: feedAddress(r.meta),
+  }
 }
 
 type FeedQuery = { cursor?: number; types?: string[]; status?: 'visible' | 'found' }
@@ -286,31 +337,8 @@ export const fetchFeed = createServerFn({ method: 'GET' })
         .select({ reportId: media.reportId, key: media.key, position: media.position })
         .from(media)
         .where(inArray(media.reportId, ids))
-      const byReport = new Map<string, { key: string; position: number }[]>()
-      for (const m of mediaRows) {
-        const arr = byReport.get(m.reportId)
-        if (arr) arr.push(m)
-        else byReport.set(m.reportId, [m])
-      }
-      return rows.map((r) => {
-        const ms = byReport.get(r.id) ?? []
-        const cover = ms.reduce<(typeof ms)[number] | null>(
-          (a, m) => (!a || m.position < a.position ? m : a),
-          null,
-        )
-        return {
-          id: r.id,
-          type: r.type,
-          title: r.title,
-          confirms: r.confirms,
-          verified: r.verified,
-          status: r.status,
-          createdAt: r.createdAt.getTime(),
-          cover: cover ? mediaUrl(cover.key) : null,
-          mediaCount: ms.length,
-          address: feedAddress(r.meta),
-        }
-      })
+      const byReport = groupMedia(mediaRows)
+      return rows.map((r) => toFeedItem(r, byReport.get(r.id) ?? []))
     })
   })
 

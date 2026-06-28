@@ -211,7 +211,7 @@ export function FeedScreen({ onSelect }: { onSelect: (id: string) => void }) {
         style={{ paddingBottom: 'calc(88px + env(safe-area-inset-bottom))' }}
       >
         {items.map((it) => (
-          <Card key={it.id} item={it} onClick={() => onSelect(it.id)} />
+          <ReportCard key={it.id} item={it} onClick={() => onSelect(it.id)} />
         ))}
         {!loading && !items.length && (
           <p className="mt-16 text-center text-[14px] text-ink-muted">
@@ -240,8 +240,8 @@ function mockCommentCount(id: string): number {
 // portada a ancho completo, y comentarios solo si hay (sin icono en 0). La
 // procedencia (verificado/comunidad) vive en el detalle, no en la lista. La
 // dirección sale del meta (feedAddress); el conteo es mock en Etapa 1 (backend
-// parqueado).
-function Card({ item, onClick }: { item: FeedItem; onClick: () => void }) {
+// parqueado). Compartida con StackDrawer (apilados de un punto).
+export function ReportCard({ item, onClick }: { item: FeedItem; onClick: () => void }) {
   const meta = typeOf(item.type)
   const comments = mockCommentCount(item.id)
   return (
@@ -290,7 +290,7 @@ function Card({ item, onClick }: { item: FeedItem; onClick: () => void }) {
             src={item.cover}
             alt=""
             loading="lazy"
-            className="h-[150px] w-full bg-surface-muted object-cover"
+            className="h-[210px] w-full bg-surface-muted object-cover"
           />
           {item.mediaCount > 1 && (
             <span className="absolute right-2 bottom-2 rounded-md bg-black/60 px-1.5 py-0.5 text-[11px] font-bold text-white">
