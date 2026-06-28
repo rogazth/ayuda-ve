@@ -31,6 +31,10 @@ import type { ReportDetail } from '../../reports/reports.functions'
 import { MOCK_COMMENTS, mockList, type Comment } from '../../mock'
 import { MoreActionsDrawer } from './more-actions-drawer'
 
+// ponytail: comentarios ocultos por ahora (acordado). El código queda intacto;
+// poner en true para volver a mostrar la sección. Mismo flag en feed-screen.tsx.
+const COMMENTS_ENABLED = false
+
 // Tipos cuyo CTA de mapa es "Ver ubicación" (no se va "hacia" ellos).
 const DIR_LABEL_TYPES = ['danger', 'road', 'security', 'flood', 'missing', 'lostpet']
 
@@ -569,9 +573,11 @@ function Body({
         )}
 
         {/* Comentarios de la comunidad */}
-        <div className="mt-6 px-5 pb-2">
-          <CommentsSection reportId={report.id} />
-        </div>
+        {COMMENTS_ENABLED && (
+          <div className="mt-6 px-5 pb-2">
+            <CommentsSection reportId={report.id} />
+          </div>
+        )}
       </div>
 
       {/* Footer: Compartir (acción primaria — difundir es el punto) + Opciones

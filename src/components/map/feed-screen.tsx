@@ -227,6 +227,10 @@ export function FeedScreen({ onSelect }: { onSelect: (id: string) => void }) {
   )
 }
 
+// ponytail: comentarios ocultos por ahora (acordado). Mismo flag en report-detail.tsx;
+// poner en true para volver a mostrar el counter en la card.
+const COMMENTS_ENABLED = false
+
 // Etapa 1: el backend de comentarios está parqueado (sin conteo por reporte). Para
 // revisar el layout de la card mostramos un conteo mock determinista por id; E2 lo
 // reemplaza con el conteo real de la tabla comments. [[mock]]
@@ -300,7 +304,7 @@ export function ReportCard({ item, onClick }: { item: FeedItem; onClick: () => v
         </div>
       )}
 
-      {comments > 0 ? (
+      {COMMENTS_ENABLED && comments > 0 ? (
         <div className="flex items-center gap-1.5 px-3 py-2.5 text-[13px] font-semibold text-ink-muted">
           <MessageCircle className="size-[16px]" /> {comments}
         </div>
