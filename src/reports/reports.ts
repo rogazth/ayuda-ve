@@ -441,6 +441,7 @@ const META_SPECS: Record<string, [key: string, label: string][]> = {
     ['capacity', 'Cantidad / capacidad'],
   ],
   support: [
+    ['address', 'Dirección'],
     ['available', 'Disponible'],
     ['schedule', 'Horario'],
   ],

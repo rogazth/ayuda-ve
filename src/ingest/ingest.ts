@@ -8,7 +8,7 @@
 // oculto. Solo escribe lo que es del origen.
 import { safeUrl } from '../reports/reports'
 
-export const INGEST_TYPES = ['missing', 'danger', 'lostpet'] as const
+export const INGEST_TYPES = ['missing', 'danger', 'lostpet', 'support'] as const
 export type IngestType = (typeof INGEST_TYPES)[number]
 
 const MAX_RECORDS = 200 // tope de batch por request

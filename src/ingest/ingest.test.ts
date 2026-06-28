@@ -74,6 +74,14 @@ test('mediaToReplace: vacío preserva (null), no vacío es autoritativo', () => 
   expect(mediaToReplace(m)).toEqual(m)
 })
 
+test('parseIngestRecord acepta support (centros de acopio)', () => {
+  const r = parseIngestRecord(
+    rec({ type: 'support', externalSource: 'centrosayudavenezuela', meta: { address: 'Av. X', available: ['Agua', 'Comida'], schedule: '8am-6pm' } }),
+  )
+  expect(r.ok).toBe(true)
+  if (r.ok) expect(r.value.type).toBe('support')
+})
+
 test('parseIngestRecord rechaza payloads inválidos', () => {
   expect(parseIngestRecord(rec({ type: 'offer' })).ok).toBe(false) // tipo fuera de ingest
   expect(parseIngestRecord(rec({ lat: 'x' })).ok).toBe(false)
