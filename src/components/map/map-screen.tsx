@@ -272,8 +272,14 @@ const PinsLayer = memo(function PinsLayer({
   onSelect: (id: string) => void
   onStack: (p: Pin) => void
 }) {
+  // El cluster se remonta SOLO al cambiar de "scope": todo-tipos (detalle) ↔ solo
+  // acopios (zoom-out global). react-leaflet-cluster no purga limpio los marcadores
+  // viejos al intercambiar dataset entero → dejaba un cluster fantasma. La key estable
+  // dentro de un scope conserva el pan fluido (no remonta al panear).
+  const scope = pins.length > 0 && pins.every((p) => p.type === 'support') ? 'support' : 'mixed'
   return (
     <MarkerClusterGroup
+      key={scope}
       maxClusterRadius={50}
       showCoverageOnHover={false}
       chunkedLoading
